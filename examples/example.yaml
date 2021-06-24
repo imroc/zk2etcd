@@ -14,9 +14,9 @@ spec:
     spec:
       containers:
       - name: zk2etcd
-        image: imroc/zk2etcd:0.2.0
+        image: imroc/zk2etcd:0.3.0
         imagePullPolicy: Always
-        command: [ "/zk2etcd" ]
+        command: [ "/bin/zk2etcd" ]
         args:
         - --zkAddr=zookeeper:2181
         - --zkPrefix=/dubbo
