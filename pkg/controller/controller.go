@@ -2,30 +2,31 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-zookeeper/zk"
+	"github.com/imroc/zk2etcd/pkg/log"
 	"github.com/imroc/zk2etcd/pkg/zookeeper"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"log"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
 type Controller struct {
+	*log.Logger
 	zkAddr     string
 	zkPrefix   string
 	etcdAddr   string
 	zkConn     *zk.Conn
-	zkConn2     *zk.Conn
+	zkConn2    *zk.Conn
 	etcdClient *clientv3.Client
 }
 
-func New(zkAddr, zkPrefix, etcdAddr string) *Controller {
+func New(zkAddr, zkPrefix, etcdAddr string, logger *log.Logger) *Controller {
 	return &Controller{
 		zkAddr:   zkAddr,
 		zkPrefix: zkPrefix,
 		etcdAddr: etcdAddr,
+		Logger:   logger,
 	}
 }
 
@@ -52,28 +53,40 @@ func (c *Controller) Run(stop <-chan struct{}) {
 		var err error
 		exists, _, err = conn.Exists(c.zkPrefix)
 		if err != nil {
-			log.Printf("failed to check path existence : %v\n", err)
+			c.Errorw("failed to check path existence",
+				"error", err,
+				"path", c.zkPrefix,
+			)
 		}
 		if !exists {
-			log.Println("zookeeper path " + c.zkPrefix + " doesn't exist, wait until it's created")
+			c.Warnw("zookeeper path doesn't exist, wait until it's created",
+				"path", c.zkPrefix,
+			)
 		}
 		time.Sleep(time.Second * 2)
 	}
 
 	// 启动全量同步一次
 	c.syncAll(c.zkPrefix)
+	c.Info("full sync completed")
 
 	// 继续同步增量
+	c.Info("start incremental sync")
 	w := zookeeper.New(conn, c.zkPrefix)
 	w.Run(stop)
 }
 
 func (c *Controller) syncAll(path string) {
-	fmt.Println("syncing all", path)
+	c.Debugw("syncing all",
+		"node", path,
+	)
 	c.syncPath(path)
 	children, _, err := c.zkConn2.Children(path)
 	if err != nil {
-		fmt.Println("ERROR:", err)
+		c.Errorw("zk failed to get children",
+			"node", path,
+			"error", err,
+		)
 		return
 	}
 	for _, child := range children {
@@ -87,7 +100,10 @@ func (c *Controller) connectZKUntilSuccess(hosts []string) *zk.Conn {
 	conn, _, err := zk.Connect(hosts, time.Second*10, option)
 	//Keep trying to connect to ZK until succeed
 	for err != nil {
-		log.Printf("failed to connect to ZooKeeper %s ,retrying : %v\n", hosts, err)
+		c.Errorw("failed to connect to zooKeeper, retrying...",
+			"error", err,
+			"hosts", hosts,
+		)
 		time.Sleep(time.Second)
 		conn, _, err = zk.Connect(hosts, time.Second*10, option)
 	}
@@ -99,14 +115,19 @@ func (c *Controller) callback(event zk.Event) {
 	case zk.EventNodeChildrenChanged:
 		c.syncChildren(event.Path)
 	default:
-		fmt.Printf("ignore event: %+v\n", event)
+		c.Debugw("ignore event",
+			"event", event,
+		)
 	}
 }
 
 func (c *Controller) syncPath(path string) {
 	v, _, err := c.zkConn2.Get(path)
 	if err != nil {
-		fmt.Println(err)
+		c.Errorw("failed to get node",
+			"node", path,
+			"error", err,
+		)
 		return
 	}
 	zkValue := string(v)
@@ -121,11 +142,18 @@ func (c *Controller) syncPath(path string) {
 }
 
 func (c *Controller) syncChildren(path string) {
-	fmt.Println("sync children", path)
+	c.Debugw("zk sync children",
+		"node", path,
+	)
 	children, _, err := c.zkConn2.Children(path)
-	fmt.Println("got children", children)
+	c.Debugw("zk got children",
+		"children", children,
+	)
 	if err != nil {
-		fmt.Println("ERROR:", err)
+		c.Errorw("zk failed to get children",
+			"node", path,
+			"error", err,
+		)
 		return
 	}
 	for _, child := range children {
@@ -138,7 +166,11 @@ func (c *Controller) etcdPut(key, value string) {
 	ctx, _ := context.WithTimeout(context.Background(), time.Second)
 	_, err := c.etcdClient.Put(ctx, key, value)
 	if err != nil {
-		fmt.Println(err)
+		c.Errorw("etcd failed to put",
+			"key", key,
+			"value", value,
+			"error", err,
+		)
 	}
 }
 
@@ -146,7 +178,10 @@ func (c *Controller) etcdGet(path string) (string, bool) {
 	ctx, _ := context.WithTimeout(context.Background(), time.Second)
 	resp, err := c.etcdClient.Get(ctx, path)
 	if err != nil {
-		fmt.Println(err)
+		c.Errorw("etcd failed to get",
+			"key", path,
+			"error", err,
+		)
 		return "", false
 	}
 	if len(resp.Kvs) != 0 {

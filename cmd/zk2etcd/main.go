@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/imroc/zk2etcd/pkg/controller"
+	"github.com/imroc/zk2etcd/pkg/log"
 	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
@@ -11,7 +12,7 @@ import (
 
 // GetRootCmd returns the root of the cobra command-tree.
 func GetRootCmd(args []string) *cobra.Command {
-	var zkAddr, zkPrefix, etcdAddr string
+	var zkAddr, zkPrefix, etcdAddr, logLevel string
 	stopChan := make(chan struct{}, 1)
 	rootCmd := &cobra.Command{
 		Use:   "zk2etcd",
@@ -20,7 +21,8 @@ func GetRootCmd(args []string) *cobra.Command {
 		DisableAutoGenTag: true,
 		Long:              `sync data from zookeeper to etcd`,
 		Run: func(cmd *cobra.Command, args []string) {
-			c := controller.New(zkAddr, zkPrefix, etcdAddr)
+			logger := log.New(logLevel)
+			c := controller.New(zkAddr, zkPrefix, etcdAddr, logger)
 			go c.Run(stopChan)
 			signalChan := make(chan os.Signal, 1)
 			signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
@@ -32,6 +34,7 @@ func GetRootCmd(args []string) *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&zkAddr, "zkAddr", "", "zookeeper address")
 	rootCmd.PersistentFlags().StringVar(&zkPrefix, "zkPrefix", "/dubbo", "zookeeper prefix")
 	rootCmd.PersistentFlags().StringVar(&etcdAddr, "etcdAddr", "", "zookeeper address")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "log level")
 	return rootCmd
 }
 
