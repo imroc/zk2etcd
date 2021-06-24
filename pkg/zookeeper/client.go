@@ -77,6 +77,26 @@ func (c *Client) Get(key string) string {
 	return string(value)
 }
 
+// Delete 暂时不用
+func (c *Client) Delete(key string) {
+	_, s, err := c.getConn().Get(key)
+	if err != nil {
+		c.Errorw("zk delete failed",
+			"key", key,
+			"error", err,
+		)
+		return
+	}
+	// TODO: 提升健壮性，处理删除冲突，进行重试
+	err = c.getConn().Delete(key, s.Version)
+	if err != nil {
+		c.Errorw("zk delete failed",
+			"key", key,
+			"error", err,
+		)
+	}
+}
+
 func (c *Client) List(key string) []string {
 	children, _, err := c.getConn().Children(key)
 	if err != nil {
