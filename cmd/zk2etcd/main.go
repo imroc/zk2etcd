@@ -35,6 +35,9 @@ func GetRootCmd(args []string) *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&zkPrefix, "zkPrefix", "/dubbo", "zookeeper prefix")
 	rootCmd.PersistentFlags().StringVar(&etcdAddr, "etcdAddr", "", "zookeeper address")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "log level")
+
+	rootCmd.AddCommand(newVersionCmd())
+
 	return rootCmd
 }
 
