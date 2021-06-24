@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"github.com/imroc/zk2etcd/pkg/controller"
 	"github.com/imroc/zk2etcd/pkg/log"
+	"github.com/imroc/zk2etcd/pkg/zookeeper"
 	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -22,7 +24,9 @@ func GetRootCmd(args []string) *cobra.Command {
 		Long:              `sync data from zookeeper to etcd`,
 		Run: func(cmd *cobra.Command, args []string) {
 			logger := log.New(logLevel)
-			c := controller.New(zkAddr, zkPrefix, etcdAddr, logger)
+			servers := strings.Split(zkAddr, ",")
+			zkClient := zookeeper.NewClient(logger, servers)
+			c := controller.New(zkClient, zkPrefix, etcdAddr, logger)
 			go c.Run(stopChan)
 			signalChan := make(chan os.Signal, 1)
 			signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)

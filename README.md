@@ -17,3 +17,17 @@ zk2etcd 是一款同步 zookeeper 数据到 etcd 的工具
 ## 变更历史
 
 参考 [CHANGELOG](CHANGELOG.md)
+
+## 迭代计划
+
+* [x] 全量同步
+* [x] 增量同步
+* [x] 版本管理 (version 子命令打印详细信息, 版本号/commit/buiddate 等)
+* [x] 日志增强 (自定义 level + json 输出)
+* [ ] 数据一致性 (周期性全量检测+watch delete)
+* [ ] 支持配置 etcd 证书
+* [ ] 可观测增强
+* [ ] 并发度控制
+* [ ] 进度统计 (需探索方案)
+* [ ] 容灾与自愈能力
+* [ ] 检测 zk 与 etcd 数据差异的 diff 能力

@@ -7,6 +7,7 @@ require (
 	github.com/go-zookeeper/zk v1.0.2
 	github.com/google/go-github v17.0.0+incompatible // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5 // indirect

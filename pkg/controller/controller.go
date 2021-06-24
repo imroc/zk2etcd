@@ -8,22 +8,24 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 type Controller struct {
 	*log.Logger
-	zkAddr     string
+	zk         *zookeeper.Client
 	zkPrefix   string
 	etcdAddr   string
 	zkConn     *zk.Conn
 	zkConn2    *zk.Conn
 	etcdClient *clientv3.Client
+	m          sync.Map
 }
 
-func New(zkAddr, zkPrefix, etcdAddr string, logger *log.Logger) *Controller {
+func New(zkClient *zookeeper.Client, zkPrefix, etcdAddr string, logger *log.Logger) *Controller {
 	return &Controller{
-		zkAddr:   zkAddr,
+		zk:       zkClient,
 		zkPrefix: zkPrefix,
 		etcdAddr: etcdAddr,
 		Logger:   logger,
@@ -41,57 +43,66 @@ func (c *Controller) Run(stop <-chan struct{}) {
 	}
 	c.etcdClient = etcdClient
 
-	hosts := strings.Split(c.zkAddr, ",")
-	conn := c.connectZKUntilSuccess(hosts)
-	conn2 := c.connectZKUntilSuccess(hosts)
-	c.zkConn = conn
-	c.zkConn2 = conn2
+	c.zk.SetCallback(c.callback)
 
-	// check path exsitence
-	exists := false
-	for !exists {
-		var err error
-		exists, _, err = conn.Exists(c.zkPrefix)
-		if err != nil {
-			c.Errorw("failed to check path existence",
-				"error", err,
-				"path", c.zkPrefix,
-			)
-		}
-		if !exists {
-			c.Warnw("zookeeper path doesn't exist, wait until it's created",
-				"path", c.zkPrefix,
-			)
-		}
-		time.Sleep(time.Second * 2)
-	}
+	c.zk.EnsureExists(c.zkPrefix)
 
 	// 启动全量同步一次
-	c.syncAll(c.zkPrefix)
+	c.Info("start full sync")
+	c.syncKeyRecursive(c.zkPrefix)
 	c.Info("full sync completed")
 
 	// 继续同步增量
 	c.Info("start incremental sync")
-	w := zookeeper.New(conn, c.zkPrefix)
-	w.Run(stop)
+	c.syncWatch(c.zkPrefix, stop)
 }
 
-func (c *Controller) syncAll(path string) {
-	c.Debugw("syncing all",
-		"node", path,
-	)
-	c.syncPath(path)
-	children, _, err := c.zkConn2.Children(path)
-	if err != nil {
-		c.Errorw("zk failed to get children",
-			"node", path,
-			"error", err,
-		)
-		return
+func (c *Controller) syncWatch(key string, stop <-chan struct{}) {
+	c.m.Store(key, true)
+	children, ch := c.zk.ListW(key)
+
+	if ch != nil {
+		go func() {
+			for {
+				select {
+				case event := <-ch:
+					if event.Type == zk.EventNodeDeleted {
+						c.m.Delete(key)
+						return
+					}
+					children, ch = c.zk.ListW(key)
+					if ch == nil {
+						c.Debugw("stop watch",
+							"key", key,
+						)
+						return
+					} else {
+						for _, child := range children {
+							_, ok := c.m.Load(filepath.Join(key, child))
+							if !ok {
+								c.syncWatch(filepath.Join(key, child), stop)
+							}
+						}
+					}
+				case <-stop:
+					return
+				}
+			}
+		}()
 	}
+
 	for _, child := range children {
-		fullPath := filepath.Join(path, child)
-		c.syncAll(fullPath)
+		c.syncWatch(filepath.Join(key, child), stop)
+	}
+}
+
+func (c *Controller) syncKeyRecursive(key string) {
+	c.syncKey(key)
+	children := c.zk.List(key)
+
+	for _, child := range children {
+		fullPath := filepath.Join(key, child)
+		c.syncKeyRecursive(fullPath)
 	}
 }
 
@@ -121,44 +132,29 @@ func (c *Controller) callback(event zk.Event) {
 	}
 }
 
-func (c *Controller) syncPath(path string) {
-	v, _, err := c.zkConn2.Get(path)
-	if err != nil {
-		c.Errorw("failed to get node",
-			"node", path,
-			"error", err,
-		)
-		return
-	}
-	zkValue := string(v)
-	etcdValue, exist := c.etcdGet(path)
+func (c *Controller) syncKey(key string) {
+	c.Debugw("sync key",
+		"key", key,
+	)
+	zkValue := c.zk.Get(key)
+	etcdValue, exist := c.etcdGet(key)
 	if exist { // key 存在
 		if zkValue != etcdValue { // 但 value 不同，更新下
-			c.etcdPut(path, zkValue)
+			c.etcdPut(key, zkValue)
 		}
 	} else { // key 不存在，创建一个
-		c.etcdPut(path, zkValue)
+		c.etcdPut(key, zkValue)
 	}
 }
 
-func (c *Controller) syncChildren(path string) {
+func (c *Controller) syncChildren(key string) {
 	c.Debugw("zk sync children",
-		"node", path,
+		"key", key,
 	)
-	children, _, err := c.zkConn2.Children(path)
-	c.Debugw("zk got children",
-		"children", children,
-	)
-	if err != nil {
-		c.Errorw("zk failed to get children",
-			"node", path,
-			"error", err,
-		)
-		return
-	}
+	children := c.zk.List(key)
 	for _, child := range children {
-		fullPath := filepath.Join(path, child)
-		c.syncPath(fullPath)
+		fullPath := filepath.Join(key, child)
+		c.syncKey(fullPath)
 	}
 }
 
