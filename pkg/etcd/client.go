@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"crypto/tls"
 	"github.com/imroc/zk2etcd/pkg/log"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"time"
@@ -18,12 +19,14 @@ type Client struct {
 	*log.Logger
 	servers []string
 	*clientv3.Client
+	tls *tls.Config
 }
 
-func NewClient(logger *log.Logger, servers []string) *Client {
+func NewClient(logger *log.Logger, servers []string, tls *tls.Config) *Client {
 	client := &Client{
 		Logger:  logger,
 		servers: servers,
+		tls:     tls,
 	}
 	err := client.init()
 	if err != nil {
@@ -39,6 +42,7 @@ func (c *Client) init() error {
 		Endpoints:   c.servers,
 		DialTimeout: 5 * time.Second,
 		Logger:      c.Desugar(),
+		TLS:         c.tls,
 	})
 	if err != nil {
 		return err

@@ -26,6 +26,7 @@ zk2etcd 是一款同步 zookeeper 数据到 etcd 的工具
 * [x] 日志增强 (自定义 level + json 输出)
 * [ ] 数据一致性 (周期性全量检测+watch delete)
 * [ ] 支持配置 etcd 证书
+* [ ] 支持配置多个 zk prefix
 * [ ] 可观测增强
 * [ ] 并发度控制
 * [ ] 进度统计 (需探索方案)

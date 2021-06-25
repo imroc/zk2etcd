@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-IMAGE := imroc/zk2etcd:0.6.0
+IMAGE := imroc/zk2etcd:0.7.0
 
 .PHONY: build_docker
 build_docker:
@@ -11,7 +11,7 @@ push:
 
 .PHONY: test
 test:
-	go run cmd/zk2etcd/*.go --zkAddr zookeeper:2181 --zkPrefix /dubbo --etcdAddr etcd:2379 --log-level debug
+	go run cmd/zk2etcd/*.go --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level debug --etcd-cacert=./debug-roc/ca.crt --etcd-cert=./debug-roc/cert.pem --etcd-key=./debug-roc/key.pem
 
 .PHONY: build
 build:
