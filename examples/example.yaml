@@ -22,3 +22,6 @@ spec:
         - --zookeeper-prefix=/dubbo
         - --etcd-servers=etcd:2379
         - --log-level=debug
+        - --etcd-cacert=/certs/ca.crt
+        - --etcd-cert=/certs/cert.pem
+        - --etcd-key=/certs/key.pem
