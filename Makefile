@@ -16,4 +16,8 @@ test:
 .PHONY: build
 build:
 	./build.sh
+
+.PHONY: lint
+lint:
+	./build.sh
 	rm ./bin/zk2etcd
