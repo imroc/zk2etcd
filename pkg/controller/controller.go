@@ -1,51 +1,40 @@
 package controller
 
 import (
-	"context"
 	"github.com/go-zookeeper/zk"
+	"github.com/imroc/zk2etcd/pkg/etcd"
 	"github.com/imroc/zk2etcd/pkg/log"
 	"github.com/imroc/zk2etcd/pkg/zookeeper"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"path/filepath"
-	"strings"
 	"sync"
-	"time"
 )
 
 type Controller struct {
 	*log.Logger
-	zk         *zookeeper.Client
-	zkPrefix   string
-	etcdAddr   string
-	zkConn     *zk.Conn
-	zkConn2    *zk.Conn
-	etcdClient *clientv3.Client
-	m          sync.Map
+	zk       *zookeeper.Client
+	zkPrefix string
+	etcd     *etcd.Client
+	m        sync.Map
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix, etcdAddr string, logger *log.Logger) *Controller {
+func New(zkClient *zookeeper.Client, zkPrefix string, etcd *etcd.Client, logger *log.Logger) *Controller {
 	return &Controller{
 		zk:       zkClient,
 		zkPrefix: zkPrefix,
-		etcdAddr: etcdAddr,
 		Logger:   logger,
+		etcd:     etcd,
 	}
 }
 
 // Run until a signal is received, this function won't block
 func (c *Controller) Run(stop <-chan struct{}) {
-	etcdClient, err := clientv3.New(clientv3.Config{
-		Endpoints:   strings.Split(c.etcdAddr, ","),
-		DialTimeout: 5 * time.Second,
-	})
-	if err != nil {
-		panic(err)
-	}
-	c.etcdClient = etcdClient
-
 	c.zk.SetCallback(c.callback)
 
+	// 检查 zk 和 etcd
+	c.Info("ensure zk")
 	c.zk.EnsureExists(c.zkPrefix)
+	c.Info("ensure etcd")
+	c.etcd.Get("/")
 
 	// 启动全量同步一次
 	c.Info("start full sync")
@@ -106,21 +95,6 @@ func (c *Controller) syncKeyRecursive(key string) {
 	}
 }
 
-func (c *Controller) connectZKUntilSuccess(hosts []string) *zk.Conn {
-	option := zk.WithEventCallback(c.callback)
-	conn, _, err := zk.Connect(hosts, time.Second*10, option)
-	//Keep trying to connect to ZK until succeed
-	for err != nil {
-		c.Errorw("failed to connect to zooKeeper, retrying...",
-			"error", err,
-			"hosts", hosts,
-		)
-		time.Sleep(time.Second)
-		conn, _, err = zk.Connect(hosts, time.Second*10, option)
-	}
-	return conn
-}
-
 func (c *Controller) callback(event zk.Event) {
 	switch event.Type {
 	case zk.EventNodeChildrenChanged:
@@ -137,18 +111,19 @@ func (c *Controller) syncKey(key string) {
 		"key", key,
 	)
 	zkValue := c.zk.Get(key)
-	etcdValue, exist := c.etcdGet(key)
+	etcdValue, exist := c.etcd.Get(key)
 	if exist { // key 存在
 		if zkValue != etcdValue { // 但 value 不同，更新下
-			c.etcdPut(key, zkValue)
+			c.etcd.Put(key, zkValue)
 		}
+		// key与value相同，忽略
 	} else { // key 不存在，创建一个
-		c.etcdPut(key, zkValue)
+		c.etcd.Put(key, zkValue)
 	}
 }
 
 func (c *Controller) syncChildren(key string) {
-	c.Debugw("zk sync children",
+	c.Debugw("sync children",
 		"key", key,
 	)
 	children := c.zk.List(key)
@@ -156,32 +131,4 @@ func (c *Controller) syncChildren(key string) {
 		fullPath := filepath.Join(key, child)
 		c.syncKey(fullPath)
 	}
-}
-
-func (c *Controller) etcdPut(key, value string) {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
-	_, err := c.etcdClient.Put(ctx, key, value)
-	if err != nil {
-		c.Errorw("etcd failed to put",
-			"key", key,
-			"value", value,
-			"error", err,
-		)
-	}
-}
-
-func (c *Controller) etcdGet(path string) (string, bool) {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
-	resp, err := c.etcdClient.Get(ctx, path)
-	if err != nil {
-		c.Errorw("etcd failed to get",
-			"key", path,
-			"error", err,
-		)
-		return "", false
-	}
-	if len(resp.Kvs) != 0 {
-		return string(resp.Kvs[0].Value), true
-	}
-	return "", false
 }
