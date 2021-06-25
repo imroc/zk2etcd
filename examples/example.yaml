@@ -18,7 +18,7 @@ spec:
         imagePullPolicy: Always
         command: [ "/bin/zk2etcd" ]
         args:
-        - --zkAddr=zookeeper:2181
-        - --zkPrefix=/dubbo
-        - --etcdAddr=etcd:2379
-        - --log-level="debug"
+        - --zookeeper-servers=zookeeper:2181
+        - --zookeeper-prefix=/dubbo
+        - --etcd-servers=etcd:2379
+        - --log-level=debug
