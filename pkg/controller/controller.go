@@ -57,6 +57,7 @@ func (c *Controller) syncWatch(key string, stop <-chan struct{}) {
 				case event := <-ch:
 					if event.Type == zk.EventNodeDeleted {
 						c.m.Delete(key)
+						c.etcd.Delete(key)
 						return
 					}
 					children, ch = c.zk.ListW(key)

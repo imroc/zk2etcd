@@ -11,7 +11,7 @@ push:
 
 .PHONY: test
 test:
-	go run cmd/zk2etcd/*.go --zkAddr zookeeper:2181 --zkPrefix /dubbo --etcdAddr etcd:2379 --log-level info
+	go run cmd/zk2etcd/*.go --zkAddr zookeeper:2181 --zkPrefix /dubbo --etcdAddr etcd:2379 --log-level debug
 
 .PHONY: build
 build:

@@ -58,11 +58,24 @@ func (c *Client) Put(key, value string) {
 	}
 }
 
-func (c *Client) Get(path string) (string, bool) {
-	resp, err := c.Client.Get(timeoutContext(), path)
+func (c *Client) Delete(key string) {
+	c.Infow("etcd delete key",
+		"key", key,
+	)
+	_, err := c.Client.Delete(timeoutContext(), key)
+	if err != nil {
+		c.Errorw("etcd failed to delete",
+			"key", key,
+			"error", err,
+		)
+	}
+}
+
+func (c *Client) Get(key string) (string, bool) {
+	resp, err := c.Client.Get(timeoutContext(), key)
 	for err != nil {
 		c.Errorw("etcd failed to get",
-			"key", path,
+			"key", key,
 			"error", err,
 		)
 		time.Sleep(time.Second)
