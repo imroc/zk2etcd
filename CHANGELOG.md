@@ -1,5 +1,14 @@
 # zk2etcd 变更历史
 
+## v0.6.0 (2021.06.25)
+
+* 支持同步删除，保证数据一致性
+* 优化命令行参数
+  * etcdAddr-->etcd-servers
+  * zkAddr-->zookeeper-servers
+  * zkPrefix-->zookeeper-prefix
+  * 优化 description
+
 ## v0.5.0 (2021.06.25)
 
 * etcd 逻辑独立，与 controller 解耦
