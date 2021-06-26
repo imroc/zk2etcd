@@ -12,22 +12,27 @@ import (
 
 type Controller struct {
 	*log.Logger
-	zk          *zookeeper.Client
-	zkPrefix    string
-	etcd        *etcd.Client
-	m           sync.Map
-	concurrency uint
-	keysToSync  chan string
+	zk              *zookeeper.Client
+	zkPrefix        []string
+	zkExcludePrefix []string
+	etcd            *etcd.Client
+	m               sync.Map
+	concurrency     uint
+	keysToSync      chan string
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix string, etcd *etcd.Client, logger *log.Logger, concurrency uint) *Controller {
+func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix string, etcd *etcd.Client, logger *log.Logger, concurrency uint) *Controller {
+	if zkPrefix == "" {
+		zkPrefix = "/"
+	}
 	return &Controller{
-		zk:          zkClient,
-		zkPrefix:    zkPrefix,
-		Logger:      logger,
-		etcd:        etcd,
-		concurrency: concurrency,
-		keysToSync:  make(chan string, concurrency),
+		zk:              zkClient,
+		zkPrefix:        strings.Split(zkPrefix, ","),
+		zkExcludePrefix: strings.Split(zkExcludePrefix, ","),
+		Logger:          logger,
+		etcd:            etcd,
+		concurrency:     concurrency,
+		keysToSync:      make(chan string, concurrency),
 	}
 }
 
@@ -51,7 +56,9 @@ func (c *Controller) Run(stop <-chan struct{}) {
 
 	// 检查 zk 和 etcd
 	c.Debugw("check zk")
-	c.zk.EnsureExists(c.zkPrefix)
+	for _, prefix := range c.zkPrefix {
+		c.zk.EnsureExists(prefix)
+	}
 	c.Info("check zk success")
 	c.Debugw("check etcd")
 	c.etcd.Get("/")
@@ -60,27 +67,23 @@ func (c *Controller) Run(stop <-chan struct{}) {
 	// 启动 worker
 	c.startWorker()
 
-	// 获取 prefix
-	prefixes := strings.Split(c.zkPrefix, ",")
-
 	// 全量同步一次
 	c.Info("start full sync")
-	for _, prefix := range prefixes {
+	for _, prefix := range c.zkPrefix {
 		c.syncKeyRecursive(prefix)
 	}
 	c.Info("full sync completed")
 
 	// 继续同步增量
 	c.Info("start incremental sync")
-	for _, prefix := range prefixes {
+	for _, prefix := range c.zkPrefix {
 		c.syncWatch(prefix, stop)
 	}
 }
 
-func (c *Controller) syncWatch(key string, stop <-chan struct{}) {
+func (c *Controller) watch(key string, stop <-chan struct{}) []string {
 	c.m.Store(key, true)
 	children, ch := c.zk.ListW(key)
-
 	if ch != nil {
 		go func() {
 			for {
@@ -111,13 +114,41 @@ func (c *Controller) syncWatch(key string, stop <-chan struct{}) {
 			}
 		}()
 	}
+	return children
+}
 
+func (c *Controller) syncWatch(key string, stop <-chan struct{}) {
+	if c.shouldExclude(key) {
+		return
+	}
+
+	// watch children
+	children := c.watch(key, stop)
+
+	// watch children recursively
 	for _, child := range children {
 		c.syncWatch(filepath.Join(key, child), stop)
 	}
 }
 
+func (c *Controller) shouldExclude(key string) bool {
+	for _, prefix := range c.zkExcludePrefix { // exclude prefix
+		if strings.HasPrefix(key, prefix) {
+			c.Debugw("ignore key in excluded prefix",
+				"key", key,
+				"excludePrefix", prefix,
+			)
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Controller) syncKeyRecursive(key string) {
+	if c.shouldExclude(key) {
+		return
+	}
+
 	c.keysToSync <- key
 	children := c.zk.List(key)
 

@@ -16,14 +16,15 @@ import (
 )
 
 var (
-	zookeeperServers string
-	zookeeperPrefix  string
-	etcdServers      string
-	logLevel         string
-	etcdCaFile       string
-	etcdCertFile     string
-	etcdKeyFile      string
-	concurrent       uint
+	zookeeperServers       string
+	zookeeperPrefix        string
+	zookeeperExcludePrefix string
+	etcdServers            string
+	logLevel               string
+	etcdCaFile             string
+	etcdCertFile           string
+	etcdKeyFile            string
+	concurrent             uint
 )
 
 var zkClient *zookeeper.Client
@@ -80,7 +81,7 @@ func GetRootCmd(args []string) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			initBase()
 
-			c := controller.New(zkClient, zookeeperPrefix, etcdClient, logger, concurrent)
+			c := controller.New(zkClient, zookeeperPrefix, zookeeperExcludePrefix, etcdClient, logger, concurrent)
 			go c.Run(stopChan)
 
 			// TODO: 实现真正优雅停止
@@ -94,6 +95,7 @@ func GetRootCmd(args []string) *cobra.Command {
 	rootCmd.SetArgs(args)
 	rootCmd.PersistentFlags().StringVar(&zookeeperServers, "zookeeper-servers", "", "comma-separated list of zookeeper servers address")
 	rootCmd.PersistentFlags().StringVar(&zookeeperPrefix, "zookeeper-prefix", "/dubbo", "comma-separated list of zookeeper path prefix to be synced")
+	rootCmd.PersistentFlags().StringVar(&zookeeperExcludePrefix, "zookeeper-exclude-prefix", "/dubbo/config", "comma-separated list of zookeeper path prefix to be excluded")
 	rootCmd.PersistentFlags().StringVar(&etcdServers, "etcd-servers", "", "comma-separated list of etcd servers address")
 	rootCmd.PersistentFlags().StringVar(&etcdCaFile, "etcd-cacert", "", "verify certificates of TLS-enabled secure servers using this CA bundle")
 	rootCmd.PersistentFlags().StringVar(&etcdCertFile, "etcd-cert", "", "identify secure client using this TLS certificate file")
