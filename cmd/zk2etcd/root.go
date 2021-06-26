@@ -18,7 +18,7 @@ import (
 var (
 	zookeeperServers       string
 	zookeeperPrefix        string
-	zookeeperExcludePrefix string
+	zookeeperExcludePrefix string // TODO: 先简单实现 exclude，后续优化 exlude 判断的性能
 	etcdServers            string
 	logLevel               string
 	etcdCaFile             string

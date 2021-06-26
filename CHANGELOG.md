@@ -1,5 +1,10 @@
 # zk2etcd 变更历史
 
+## v0.9.0 (2021.06.26)
+
+* `--zookeeper-prefix` 支持多个 prefix (逗号分隔)
+* 支持 `--zookeeper-exclude-prefix` 以排除特定前缀的 key (支持多个，逗号分隔)
+
 ## v0.8.0 (2021.06.26)
 
 * 抽离通用对象初始化逻辑(zk,etcd,logger)，方便后续与其它子命令共用(比如diff)
