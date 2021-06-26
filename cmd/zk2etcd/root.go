@@ -93,7 +93,7 @@ func GetRootCmd(args []string) *cobra.Command {
 
 	rootCmd.SetArgs(args)
 	rootCmd.PersistentFlags().StringVar(&zookeeperServers, "zookeeper-servers", "", "comma-separated list of zookeeper servers address")
-	rootCmd.PersistentFlags().StringVar(&zookeeperPrefix, "zookeeper-prefix", "/dubbo", "the zookeeper path prefix to be synced")
+	rootCmd.PersistentFlags().StringVar(&zookeeperPrefix, "zookeeper-prefix", "/dubbo", "comma-separated list of zookeeper path prefix to be synced")
 	rootCmd.PersistentFlags().StringVar(&etcdServers, "etcd-servers", "", "comma-separated list of etcd servers address")
 	rootCmd.PersistentFlags().StringVar(&etcdCaFile, "etcd-cacert", "", "verify certificates of TLS-enabled secure servers using this CA bundle")
 	rootCmd.PersistentFlags().StringVar(&etcdCertFile, "etcd-cert", "", "identify secure client using this TLS certificate file")

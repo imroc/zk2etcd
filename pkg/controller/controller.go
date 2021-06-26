@@ -6,6 +6,7 @@ import (
 	"github.com/imroc/zk2etcd/pkg/log"
 	"github.com/imroc/zk2etcd/pkg/zookeeper"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -59,14 +60,21 @@ func (c *Controller) Run(stop <-chan struct{}) {
 	// 启动 worker
 	c.startWorker()
 
+	// 获取 prefix
+	prefixes := strings.Split(c.zkPrefix, ",")
+
 	// 全量同步一次
 	c.Info("start full sync")
-	c.syncKeyRecursive(c.zkPrefix)
+	for _, prefix := range prefixes {
+		c.syncKeyRecursive(prefix)
+	}
 	c.Info("full sync completed")
 
 	// 继续同步增量
 	c.Info("start incremental sync")
-	c.syncWatch(c.zkPrefix, stop)
+	for _, prefix := range prefixes {
+		c.syncWatch(prefix, stop)
+	}
 }
 
 func (c *Controller) syncWatch(key string, stop <-chan struct{}) {
