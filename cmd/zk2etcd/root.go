@@ -23,6 +23,7 @@ var (
 	etcdCaFile       string
 	etcdCertFile     string
 	etcdKeyFile      string
+	concurrent       uint
 )
 
 var zkClient *zookeeper.Client
@@ -79,7 +80,7 @@ func GetRootCmd(args []string) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			initBase()
 
-			c := controller.New(zkClient, zookeeperPrefix, etcdClient, logger)
+			c := controller.New(zkClient, zookeeperPrefix, etcdClient, logger, concurrent)
 			go c.Run(stopChan)
 
 			// TODO: 实现真正优雅停止
@@ -98,6 +99,7 @@ func GetRootCmd(args []string) *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&etcdCertFile, "etcd-cert", "", "identify secure client using this TLS certificate file")
 	rootCmd.PersistentFlags().StringVar(&etcdKeyFile, "etcd-key", "", "identify secure client using this TLS key file")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log output level，possible values: 'debug', 'info', 'warn', 'error', 'panic', 'fatal'")
+	rootCmd.PersistentFlags().UintVar(&concurrent, "concurrent", 20, "the concurreny of syncing worker")
 
 	rootCmd.AddCommand(newVersionCmd())
 

@@ -11,7 +11,7 @@ push:
 
 .PHONY: test
 test:
-	go run cmd/zk2etcd/*.go --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level debug --etcd-cacert=./debug-roc/ca.crt --etcd-cert=./debug-roc/cert.pem --etcd-key=./debug-roc/key.pem
+	go run cmd/zk2etcd/*.go --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level debug
 
 .PHONY: build
 build:

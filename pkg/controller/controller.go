@@ -11,18 +11,36 @@ import (
 
 type Controller struct {
 	*log.Logger
-	zk       *zookeeper.Client
-	zkPrefix string
-	etcd     *etcd.Client
-	m        sync.Map
+	zk          *zookeeper.Client
+	zkPrefix    string
+	etcd        *etcd.Client
+	m           sync.Map
+	concurrency uint
+	keysToSync  chan string
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix string, etcd *etcd.Client, logger *log.Logger) *Controller {
+func New(zkClient *zookeeper.Client, zkPrefix string, etcd *etcd.Client, logger *log.Logger, concurrency uint) *Controller {
 	return &Controller{
-		zk:       zkClient,
-		zkPrefix: zkPrefix,
-		Logger:   logger,
-		etcd:     etcd,
+		zk:          zkClient,
+		zkPrefix:    zkPrefix,
+		Logger:      logger,
+		etcd:        etcd,
+		concurrency: concurrency,
+		keysToSync:  make(chan string, concurrency),
+	}
+}
+
+func (c *Controller) startWorker() {
+	c.Info("start worker",
+		"concurrency", c.concurrency,
+	)
+	for i := uint(0); i < c.concurrency; i++ {
+		go func() {
+			for {
+				key := <-c.keysToSync
+				c.syncKey(key)
+			}
+		}()
 	}
 }
 
@@ -31,12 +49,17 @@ func (c *Controller) Run(stop <-chan struct{}) {
 	c.zk.SetCallback(c.callback)
 
 	// 检查 zk 和 etcd
-	c.Info("ensure zk")
+	c.Debugw("check zk")
 	c.zk.EnsureExists(c.zkPrefix)
-	c.Info("ensure etcd")
+	c.Info("check zk success")
+	c.Debugw("check etcd")
 	c.etcd.Get("/")
+	c.Info("check etcd success")
 
-	// 启动全量同步一次
+	// 启动 worker
+	c.startWorker()
+
+	// 全量同步一次
 	c.Info("start full sync")
 	c.syncKeyRecursive(c.zkPrefix)
 	c.Info("full sync completed")
@@ -87,7 +110,7 @@ func (c *Controller) syncWatch(key string, stop <-chan struct{}) {
 }
 
 func (c *Controller) syncKeyRecursive(key string) {
-	c.syncKey(key)
+	c.keysToSync <- key
 	children := c.zk.List(key)
 
 	for _, child := range children {
