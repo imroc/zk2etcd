@@ -94,3 +94,20 @@ func (c *Client) Get(key string) (string, bool) {
 	}
 	return "", false
 }
+
+func (c *Client) ListAllKeys(key string) []string {
+	resp, err := c.Client.Get(timeoutContext(), key, clientv3.WithPrefix())
+	for err != nil {
+		c.Errorw("etcd failed to get",
+			"key", key,
+			"error", err,
+		)
+		time.Sleep(time.Second)
+		resp, err = c.Client.Get(timeoutContext(), key)
+	}
+	keys := []string{}
+	for _, kvs := range resp.Kvs {
+		keys = append(keys, string(kvs.Key))
+	}
+	return keys
+}

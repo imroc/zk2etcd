@@ -21,14 +21,11 @@ type Controller struct {
 	keysToSync      chan string
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix string, etcd *etcd.Client, logger *log.Logger, concurrency uint) *Controller {
-	if zkPrefix == "" {
-		zkPrefix = "/"
-	}
+func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint) *Controller {
 	return &Controller{
 		zk:              zkClient,
-		zkPrefix:        strings.Split(zkPrefix, ","),
-		zkExcludePrefix: strings.Split(zkExcludePrefix, ","),
+		zkPrefix:        zkPrefix,
+		zkExcludePrefix: zkExcludePrefix,
 		Logger:          logger,
 		etcd:            etcd,
 		concurrency:     concurrency,

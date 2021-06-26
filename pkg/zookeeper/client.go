@@ -61,14 +61,26 @@ func (c *Client) getWatchConn() *zk.Conn {
 	return c.watchConn
 }
 
+func (c *Client) Exists(key string) bool {
+	exsits, _, err := c.getConn().Exists(key)
+	for err != nil {
+		c.Errorw("zk check exists failed",
+			"key", key,
+			"error", err,
+		)
+		time.Sleep(time.Second)
+	}
+	return exsits
+}
+
 func (c *Client) Get(key string) string {
 	value, _, err := c.getConn().Get(key)
-	if err != nil {
+	for err != nil {
 		c.Errorw("zk get failed",
 			"key", key,
 			"error", err,
 		)
-		return ""
+		time.Sleep(time.Second)
 	}
 	c.Debugw("zk get",
 		"key", key,
@@ -80,20 +92,21 @@ func (c *Client) Get(key string) string {
 // Delete 暂时不用
 func (c *Client) Delete(key string) {
 	_, s, err := c.getConn().Get(key)
-	if err != nil {
+	for err != nil {
 		c.Errorw("zk delete failed",
 			"key", key,
 			"error", err,
 		)
-		return
+		time.Sleep(time.Second)
 	}
 	// TODO: 提升健壮性，处理删除冲突，进行重试
 	err = c.getConn().Delete(key, s.Version)
-	if err != nil {
+	for err != nil {
 		c.Errorw("zk delete failed",
 			"key", key,
 			"error", err,
 		)
+		time.Sleep(time.Second)
 	}
 }
 

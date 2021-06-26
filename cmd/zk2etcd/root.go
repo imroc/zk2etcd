@@ -25,6 +25,12 @@ var (
 	etcdCertFile           string
 	etcdKeyFile            string
 	concurrent             uint
+	isDiff                 bool
+)
+
+var (
+	zkPrefixes        []string
+	zkExcludePrefixes []string
 )
 
 var zkClient *zookeeper.Client
@@ -32,6 +38,12 @@ var etcdClient *etcd.Client
 var logger *log.Logger
 
 func initBase() {
+	zkPrefixes = strings.Split(zookeeperPrefix, ",")
+	if len(zkPrefixes) == 0 {
+		zkPrefixes = append(zkPrefixes, "/")
+	}
+	zkExcludePrefixes = strings.Split(zookeeperExcludePrefix, ",")
+
 	logger = log.New(logLevel)
 	zkClient = zookeeper.NewClient(logger, strings.Split(zookeeperServers, ","))
 
@@ -81,7 +93,12 @@ func GetRootCmd(args []string) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			initBase()
 
-			c := controller.New(zkClient, zookeeperPrefix, zookeeperExcludePrefix, etcdClient, logger, concurrent)
+			if isDiff {
+				diff()
+				return
+			}
+
+			c := controller.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, logger, concurrent)
 			go c.Run(stopChan)
 
 			// TODO: 实现真正优雅停止
@@ -102,6 +119,7 @@ func GetRootCmd(args []string) *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&etcdKeyFile, "etcd-key", "", "identify secure client using this TLS key file")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log output level，possible values: 'debug', 'info', 'warn', 'error', 'panic', 'fatal'")
 	rootCmd.PersistentFlags().UintVar(&concurrent, "concurrent", 20, "the concurreny of syncing worker")
+	rootCmd.Flags().BoolVar(&isDiff, "diff", false, "is just run diff")
 
 	rootCmd.AddCommand(newVersionCmd())
 
