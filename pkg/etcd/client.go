@@ -53,12 +53,14 @@ func (c *Client) init() error {
 
 func (c *Client) Put(key, value string) {
 	_, err := c.Client.Put(timeoutContext(), key, value)
-	if err != nil {
+	for err != nil {
 		c.Errorw("etcd failed to put",
 			"key", key,
 			"value", value,
 			"error", err,
 		)
+		time.Sleep(time.Second)
+		_, err = c.Client.Put(timeoutContext(), key, value)
 	}
 }
 
@@ -67,11 +69,13 @@ func (c *Client) Delete(key string) {
 		"key", key,
 	)
 	_, err := c.Client.Delete(timeoutContext(), key)
-	if err != nil {
+	for err != nil {
 		c.Errorw("etcd failed to delete",
 			"key", key,
 			"error", err,
 		)
+		time.Sleep(time.Second)
+		_, err = c.Client.Delete(timeoutContext(), key)
 	}
 }
 
@@ -83,6 +87,7 @@ func (c *Client) Get(key string) (string, bool) {
 			"error", err,
 		)
 		time.Sleep(time.Second)
+		resp, err = c.Client.Get(timeoutContext(), key)
 	}
 	if len(resp.Kvs) != 0 {
 		return string(resp.Kvs[0].Value), true
