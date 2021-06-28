@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"github.com/imroc/zk2etcd/pkg/diff"
 	"github.com/spf13/cobra"
+	"time"
 )
 
 func newDiffCmd(args []string) *cobra.Command {
@@ -18,12 +20,15 @@ func newDiffCmd(args []string) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			zkClient, etcdClient, logger, zkPrefixes, zkExcludePrefixes := common.GetAll()
 			d := diff.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, logger, concurrent)
+			before := time.Now()
 			d.Run()
+			cost := time.Since(before)
+			fmt.Println("total cost: ", cost)
 		},
 	}
 
 	cmd.SetArgs(args)
 	common.AddFlags(cmd.Flags())
-	cmd.Flags().UintVar(&concurrent, "concurrent", 20, "the concurreny of syncing worker")
+	cmd.Flags().UintVar(&concurrent, "concurrent", 50, "the concurreny of syncing worker")
 	return cmd
 }
