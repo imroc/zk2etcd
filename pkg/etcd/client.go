@@ -68,14 +68,14 @@ func (c *Client) Delete(key string) {
 	c.Infow("etcd delete key",
 		"key", key,
 	)
-	_, err := c.Client.Delete(timeoutContext(), key)
+	_, err := c.Client.Delete(timeoutContext(), key, clientv3.WithPrefix())
 	for err != nil {
 		c.Errorw("etcd failed to delete",
 			"key", key,
 			"error", err,
 		)
 		time.Sleep(time.Second)
-		_, err = c.Client.Delete(timeoutContext(), key)
+		_, err = c.Client.Delete(timeoutContext(), key, clientv3.WithPrefix())
 	}
 }
 
