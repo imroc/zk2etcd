@@ -170,15 +170,21 @@ func (s *Syncer) syncKey(key string) {
 	s.Debugw("sync key",
 		"key", key,
 	)
-	zkValue := s.zk.Get(key)
+	zkValue, ok := s.zk.Get(key)
 	etcdValue, exist := s.etcd.Get(key)
-	if exist { // key 存在
-		if zkValue != etcdValue { // 但 value 不同，更新下
+	if exist { // etcd 中 key 存在
+		if !ok { // zk 中 key 不存在，删除 etcd 中对应 key
+			s.etcd.Delete(key)
+			return
+		}
+		if zkValue != etcdValue { // zk 与 etcd 的 key 都存在，但 value 不同，更新下 etcd
 			s.etcd.Put(key, zkValue)
 		}
 		// key与value相同，忽略
-	} else { // key 不存在，创建一个
-		s.etcd.Put(key, zkValue)
+	} else {    // etcd key 不存在
+		if ok { // zk key 存在，etcd 补数据
+			s.etcd.Put(key, zkValue)
+		}
 	}
 }
 
