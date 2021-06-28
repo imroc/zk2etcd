@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/imroc/zk2etcd/pkg/controller"
+	"github.com/imroc/zk2etcd/pkg/sync"
 	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
@@ -22,8 +22,8 @@ func newSyncCmd(args []string) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			zkClient, etcdClient, logger, zkPrefixes, zkExcludePrefixes := common.GetAll()
 
-			c := controller.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, logger, concurrent)
-			go c.Run(stopChan)
+			s := sync.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, logger, concurrent)
+			go s.Run(stopChan)
 
 			// TODO: 实现真正优雅停止
 			signalChan := make(chan os.Signal, 1)
