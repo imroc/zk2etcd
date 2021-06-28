@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Diff struct {
@@ -46,6 +47,12 @@ func (d *Diff) starDiffWorkers() {
 	d.Info("start diff worker",
 		"concurrency", d.concurrency,
 	)
+	go func() {
+		for range time.Tick(5 * time.Second) {
+			d.Infow("compared zk keys",
+				"count", d.zkKeyCount.String())
+		}
+	}()
 	for i := uint(0); i < d.concurrency; i++ {
 		go func() {
 			for {
@@ -61,7 +68,7 @@ func (d *Diff) handleKey(key string) {
 	if d.shouldExclude(key) {
 		return
 	}
-	d.zkKeyCount.Inc()
+	defer d.zkKeyCount.Inc()
 
 	if _, ok := d.etcdKeys[key]; ok {
 		d.mux.Lock()
@@ -113,6 +120,10 @@ func (d *Diff) Run() {
 func (d *Diff) shouldExclude(key string) bool {
 	for _, prefix := range d.zkExcludePrefix { // exclude prefix
 		if strings.HasPrefix(key, prefix) {
+			d.Debugw("ignore key in excluded prefix",
+				"key", key,
+				"excludePrefix", prefix,
+			)
 			return true
 		}
 	}
