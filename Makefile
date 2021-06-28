@@ -9,9 +9,13 @@ build_docker:
 push:
 	docker push $(IMAGE)
 
-.PHONY: test
-test:
-	go run cmd/zk2etcd/*.go --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level info --diff
+.PHONY: sync
+sync:
+	go run cmd/zk2etcd/*.go sync --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level debug
+
+.PHONY: diff
+diff:
+	go run cmd/zk2etcd/*.go diff --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level info
 
 .PHONY: build
 build:
@@ -20,4 +24,8 @@ build:
 .PHONY: lint
 lint:
 	./build.sh
+	rm ./bin/zk2etcd
+
+.PHONY: clean
+clean:
 	rm ./bin/zk2etcd
