@@ -35,6 +35,6 @@ func newSyncCmd(args []string) *cobra.Command {
 
 	cmd.SetArgs(args)
 	common.AddFlags(cmd.Flags())
-	cmd.Flags().UintVar(&concurrent, "concurrent", 20, "the concurreny of syncing worker")
+	cmd.Flags().UintVar(&concurrent, "concurrent", 50, "the concurreny of syncing worker")
 	return cmd
 }
