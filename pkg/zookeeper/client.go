@@ -73,9 +73,24 @@ func (c *Client) Exists(key string) bool {
 	return exsits
 }
 
-func (c *Client) Get(key string) string {
+func (c *Client) Create(key string) {
+	flag := int32(0)
+	acl := zk.WorldACL(zk.PermAll)
+	_, err := c.getConn().Create(key, []byte("douyudouyu"), flag, acl)
+	if err != nil {
+		c.Errorw("zk create key failed",
+			"error", err,
+			"key", key,
+		)
+	}
+}
+
+func (c *Client) Get(key string) (string, bool) {
 	value, _, err := c.getConn().Get(key)
 	for err != nil {
+		if err == zk.ErrNoNode {
+			return "", false
+		}
 		c.Errorw("zk get failed",
 			"key", key,
 			"error", err,
@@ -86,7 +101,7 @@ func (c *Client) Get(key string) string {
 		"key", key,
 		"value", value,
 	)
-	return string(value)
+	return string(value), true
 }
 
 // Delete 暂时不用

@@ -11,10 +11,6 @@ import (
 	"strings"
 )
 
-var (
-	concurrent uint
-)
-
 type Common struct {
 	zookeeperServers       string
 	zookeeperPrefix        string
@@ -25,8 +21,6 @@ type Common struct {
 	etcdCertFile           string
 	etcdKeyFile            string
 }
-
-type ShouldExclude func(string) bool
 
 func (c *Common) AddFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.zookeeperServers, "zookeeper-servers", "", "comma-separated list of zookeeper servers address")

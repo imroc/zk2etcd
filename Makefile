@@ -17,6 +17,10 @@ sync:
 diff:
 	go run cmd/zk2etcd/*.go diff --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level info
 
+.PHONY: genzk
+genzk:
+	go run cmd/zk2etcd/*.go genzk --zookeeper-servers zookeeper:2181
+
 .PHONY: build
 build:
 	./build.sh
