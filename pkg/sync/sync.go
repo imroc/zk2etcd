@@ -5,9 +5,11 @@ import (
 	"github.com/imroc/zk2etcd/pkg/etcd"
 	"github.com/imroc/zk2etcd/pkg/log"
 	"github.com/imroc/zk2etcd/pkg/zookeeper"
+	"go.uber.org/atomic"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Syncer struct {
@@ -19,6 +21,7 @@ type Syncer struct {
 	m               sync.Map
 	concurrency     uint
 	keysToSync      chan string
+	keyCountSynced  atomic.Int32
 }
 
 func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint) *Syncer {
@@ -37,6 +40,13 @@ func (s *Syncer) startWorker() {
 	s.Info("start worker",
 		"concurrency", s.concurrency,
 	)
+	go func() {
+		for range time.Tick(1 * time.Second) {
+			s.Infow("synced key count",
+				"count", s.keyCountSynced,
+			)
+		}
+	}()
 	for i := uint(0); i < s.concurrency; i++ {
 		go func() {
 			for {
@@ -170,6 +180,7 @@ func (s *Syncer) syncKey(key string) {
 	s.Debugw("sync key",
 		"key", key,
 	)
+	defer s.keyCountSynced.Inc()
 	zkValue, ok := s.zk.Get(key)
 	etcdValue, exist := s.etcd.Get(key)
 	if exist { // etcd 中 key 存在
