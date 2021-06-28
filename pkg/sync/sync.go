@@ -83,7 +83,7 @@ func (s *Syncer) Run(stop <-chan struct{}) {
 	cost := time.Since(before)
 	s.Infow("full sync completed",
 		"cost", cost.String(),
-		"keyCount", s.keyCountSynced,
+		"keyCount", s.keyCountSynced.String(),
 	)
 
 	// 继续同步增量

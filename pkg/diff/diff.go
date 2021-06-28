@@ -7,7 +7,6 @@ import (
 	"github.com/imroc/zk2etcd/pkg/zookeeper"
 	"go.uber.org/atomic"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -51,8 +50,6 @@ func (d *Diff) starDiffWorkers() {
 		for range time.Tick(2 * time.Second) {
 			d.Infow("status refresh",
 				"count", d.zkKeyCount.String(),
-				"goroutine", runtime.NumGoroutine(),
-				"channel", len(d.keys),
 			)
 		}
 	}()
