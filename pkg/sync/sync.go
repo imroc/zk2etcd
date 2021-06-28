@@ -43,7 +43,7 @@ func (s *Syncer) startWorker() {
 	go func() {
 		for range time.Tick(1 * time.Second) {
 			s.Infow("synced key count",
-				"count", s.keyCountSynced,
+				"count", s.keyCountSynced.String(),
 			)
 		}
 	}()
@@ -76,10 +76,15 @@ func (s *Syncer) Run(stop <-chan struct{}) {
 
 	// 全量同步一次
 	s.Info("start full sync")
+	before := time.Now()
 	for _, prefix := range s.zkPrefix {
 		s.syncKeyRecursive(prefix)
 	}
-	s.Info("full sync completed")
+	cost := time.Since(before)
+	s.Infow("full sync completed",
+		"cost", cost.String(),
+		"keyCount", s.keyCountSynced,
+	)
 
 	// 继续同步增量
 	s.Info("start incremental sync")
