@@ -23,6 +23,8 @@ type Syncer struct {
 	keysToSync       chan string
 	keyCountSynced   atomic.Int32
 	fullSyncInterval time.Duration
+	watcher          map[string]struct{}
+	watcherLock      sync.Mutex
 }
 
 func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint, fullSyncInterval time.Duration) *Syncer {
@@ -35,6 +37,7 @@ func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *e
 		concurrency:      concurrency,
 		keysToSync:       make(chan string, concurrency),
 		fullSyncInterval: fullSyncInterval,
+		watcher:          make(map[string]struct{}),
 	}
 }
 
@@ -95,7 +98,6 @@ func (s *Syncer) ensureClients() {
 
 // Run until a signal is received, this function won't block
 func (s *Syncer) Run(stop <-chan struct{}) {
-	s.zk.SetCallback(s.callback)
 
 	// 检查 zk 和 etcd
 	s.ensureClients()
@@ -125,54 +127,95 @@ func (s *Syncer) StartFullSyncInterval() {
 	}()
 }
 
+func (s *Syncer) removeWatch(key string) {
+	s.watcherLock.Lock()
+	if _, ok := s.watcher[key]; !ok {
+		s.Warnw("remove watch but watcher does not exist",
+			"key", key,
+		)
+		s.watcherLock.Unlock()
+		return
+	}
+	delete(s.watcher, key)
+	s.watcherLock.Unlock()
+}
+
+func (s *Syncer) handleEvent(event zk.Event) bool {
+	s.Debugw("handle event",
+		"type", event.Type.String(),
+		"state", event.State.String(),
+		"error", event.Err,
+		"path", event.Path,
+	)
+	switch event.Type {
+	case zk.EventNodeDeleted:
+		s.etcd.Delete(event.Path)
+		s.removeWatch(event.Path)
+		return false
+	case zk.EventNodeChildrenChanged:
+		s.syncChildren(event.Path)
+		return true
+	default:
+		s.Warnw("unknown event",
+			"type", event.Type.String(),
+			"state", event.State.String(),
+			"error", event.Err,
+			"path", event.Path,
+		)
+		return false
+	}
+}
+
 func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
-	s.m.Store(key, true)
-	s.Debugw("before watching children",
+	s.watcherLock.Lock()
+	if _, ok := s.watcher[key]; ok {
+		s.watcherLock.Unlock()
+		return nil
+	}
+	s.watcher[key] = struct{}{}
+	s.watcherLock.Unlock()
+
+	s.Debugw("watch key",
 		"key", key,
 	)
+
 	children, ch := s.zk.ListW(key)
-	s.Debugw("after watching children",
-		"key", key,
-	)
-	if ch != nil {
-		go func() {
-			for {
-				select {
-				case event := <-ch:
-					s.Infow("received event",
-						"event", event,
-						"parent", key,
-					)
-					if event.Type == zk.EventNodeDeleted {
-						s.m.Delete(key)
-						s.etcd.Delete(key)
-						return
-					}
-					children, ch = s.zk.ListW(key)
-					if ch == nil {
-						s.Debugw("stop watch",
-							"key", key,
-						)
-						return
-					} else {
-						for _, child := range children {
-							_, ok := s.m.Load(filepath.Join(key, child))
-							if !ok {
-								s.syncWatchRecursive(filepath.Join(key, child), stop)
-							}
-						}
-					}
-				case <-stop:
+
+	if ch == nil {
+		s.Warnw("key not exist",
+			"key", key,
+		)
+		return children
+	}
+
+	go func() {
+		for {
+			select {
+			case event := <-ch:
+				shouldContinue := s.handleEvent(event)
+				if !shouldContinue {
+					s.removeWatch(event.Path)
 					return
 				}
+				children, ch = s.zk.ListW(key)
+				if ch == nil {
+					s.Warnw("continue list watch children but key not exist any more",
+						"key", key,
+					)
+					s.removeWatch(event.Path)
+					return
+				}
+				for _, child := range children {
+					newKey := filepath.Join(key, child)
+					s.watch(newKey, stop)
+					s.syncKey(newKey)
+				}
+			case <-stop:
+				return
 			}
-		}()
-	} else {
-		s.Warnw("got nil channel from list children watch",
-			"key", key,
-			"children", children,
-		)
-	}
+		}
+	}()
+
 	return children
 }
 
@@ -214,17 +257,6 @@ func (s *Syncer) syncKeyRecursive(key string) {
 	for _, child := range children {
 		fullPath := filepath.Join(key, child)
 		s.syncKeyRecursive(fullPath)
-	}
-}
-
-func (s *Syncer) callback(event zk.Event) {
-	switch event.Type {
-	case zk.EventNodeChildrenChanged:
-		s.syncChildren(event.Path)
-	default:
-		s.Debugw("ignore event",
-			"event", event,
-		)
 	}
 }
 

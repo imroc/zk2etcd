@@ -109,7 +109,6 @@ func (c *Client) Get(key string) (value string, ok bool) {
 	return
 }
 
-
 func (c *Client) ListAllKeys(key string) []string {
 	resp, err := c.Client.Get(timeoutContext(), key, clientv3.WithPrefix())
 	for err != nil {

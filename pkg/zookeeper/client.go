@@ -11,7 +11,6 @@ type Client struct {
 	servers   []string
 	conn      *zk.Conn
 	watchConn *zk.Conn
-	callback  zk.EventCallback
 }
 
 func NewClient(logger *log.Logger, servers []string) *Client {
@@ -20,10 +19,6 @@ func NewClient(logger *log.Logger, servers []string) *Client {
 		servers: servers,
 	}
 	return client
-}
-
-func (c *Client) SetCallback(callback zk.EventCallback) {
-	c.callback = callback
 }
 
 func (c *Client) EnsureExists(key string) {
@@ -49,14 +44,14 @@ func (c *Client) EnsureExists(key string) {
 
 func (c *Client) getConn() *zk.Conn {
 	if c.conn == nil {
-		c.conn = c.connectUntilSuccess(false)
+		c.conn = c.connectUntilSuccess()
 	}
 	return c.conn
 }
 
 func (c *Client) getWatchConn() *zk.Conn {
 	if c.watchConn == nil {
-		c.watchConn = c.connectUntilSuccess(true)
+		c.watchConn = c.connectUntilSuccess()
 	}
 	return c.watchConn
 }
@@ -173,28 +168,23 @@ func (c *Client) ListW(key string) (children []string, ch <-chan zk.Event) {
 	return
 }
 
-func (c *Client) connect(needCallback bool) (conn *zk.Conn, err error) {
+func (c *Client) connect() (conn *zk.Conn, err error) {
 	c.Debugw("zk connect",
 		"servers", c.servers,
 	)
-	if needCallback {
-		option := zk.WithEventCallback(c.callback)
-		conn, _, err = zk.Connect(c.servers, time.Second*10, option)
-	} else {
-		conn, _, err = zk.Connect(c.servers, time.Second*10)
-	}
+	conn, _, err = zk.Connect(c.servers, time.Second*10)
 	return
 }
 
-func (c *Client) connectUntilSuccess(needCallback bool) *zk.Conn {
-	conn, err := c.connect(needCallback)
+func (c *Client) connectUntilSuccess() *zk.Conn {
+	conn, err := c.connect()
 	for err != nil { // 如果连接失败，一直重试，直到成功
 		c.Errorw("failed to connect to zooKeeper, retrying...",
 			"error", err,
 			"servers", c.servers,
 		)
 		time.Sleep(time.Second)
-		conn, err = c.connect(needCallback)
+		conn, err = c.connect()
 	}
 	return conn
 }
