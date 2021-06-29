@@ -14,25 +14,27 @@ import (
 
 type Syncer struct {
 	*log.Logger
-	zk              *zookeeper.Client
-	zkPrefix        []string
-	zkExcludePrefix []string
-	etcd            *etcd.Client
-	m               sync.Map
-	concurrency     uint
-	keysToSync      chan string
-	keyCountSynced  atomic.Int32
+	zk               *zookeeper.Client
+	zkPrefix         []string
+	zkExcludePrefix  []string
+	etcd             *etcd.Client
+	m                sync.Map
+	concurrency      uint
+	keysToSync       chan string
+	keyCountSynced   atomic.Int32
+	fullSyncInterval time.Duration
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint) *Syncer {
+func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint, fullSyncInterval time.Duration) *Syncer {
 	return &Syncer{
-		zk:              zkClient,
-		zkPrefix:        zkPrefix,
-		zkExcludePrefix: zkExcludePrefix,
-		Logger:          logger,
-		etcd:            etcd,
-		concurrency:     concurrency,
-		keysToSync:      make(chan string, concurrency),
+		zk:               zkClient,
+		zkPrefix:         zkPrefix,
+		zkExcludePrefix:  zkExcludePrefix,
+		Logger:           logger,
+		etcd:             etcd,
+		concurrency:      concurrency,
+		keysToSync:       make(chan string, concurrency),
+		fullSyncInterval: fullSyncInterval,
 	}
 }
 
@@ -64,6 +66,7 @@ func (s *Syncer) SyncIncremental(stop <-chan struct{}) {
 		s.syncWatch(prefix, stop)
 	}
 }
+
 func (s *Syncer) FullSync() {
 	s.Info("start full sync")
 	before := time.Now()
@@ -97,13 +100,23 @@ func (s *Syncer) Run(stop <-chan struct{}) {
 	s.startWorker()
 
 	// 全量同步一次
-	s.Info("start full sync")
 	s.FullSync()
 
+	// 定期全量同步
+	s.StartFullSyncInterval()
 
 	// 继续同步增量
 	s.SyncIncremental(stop)
 
+}
+
+func (s *Syncer) StartFullSyncInterval() {
+	if s.fullSyncInterval <= 0 {
+		return
+	}
+	for range time.Tick(s.fullSyncInterval) {
+		s.FullSync()
+	}
 }
 
 func (s *Syncer) watch(key string, stop <-chan struct{}) []string {

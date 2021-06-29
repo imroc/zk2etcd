@@ -6,12 +6,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func newSyncCmd(args []string) *cobra.Command {
 	var common Common
 	stopChan := make(chan struct{}, 1)
 	var concurrent uint
+	var fullSyncInterval time.Duration
 
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -22,7 +24,7 @@ func newSyncCmd(args []string) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			zkClient, etcdClient, logger, zkPrefixes, zkExcludePrefixes := common.GetAll()
 
-			s := sync.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, logger, concurrent)
+			s := sync.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, logger, concurrent, fullSyncInterval)
 			go s.Run(stopChan)
 
 			// TODO: 实现真正优雅停止
@@ -36,5 +38,6 @@ func newSyncCmd(args []string) *cobra.Command {
 	cmd.SetArgs(args)
 	common.AddFlags(cmd.Flags())
 	cmd.Flags().UintVar(&concurrent, "concurrent", 50, "the concurreny of syncing worker")
+	cmd.Flags().DurationVar(&fullSyncInterval, "fullsync-interval", 5*time.Minute, "the interval of full sync, set to 0s to disable it")
 	return cmd
 }
