@@ -57,6 +57,28 @@ func (s *Syncer) startWorker() {
 	}
 }
 
+func (s *Syncer) SyncIncremental(stop <-chan struct{}) {
+	s.Info("start incremental sync")
+
+	for _, prefix := range s.zkPrefix {
+		s.syncWatch(prefix, stop)
+	}
+}
+func (s *Syncer) FullSync() {
+	s.Info("start full sync")
+	before := time.Now()
+
+	for _, prefix := range s.zkPrefix {
+		s.syncKeyRecursive(prefix)
+	}
+
+	cost := time.Since(before)
+	s.Infow("full sync completed",
+		"cost", cost.String(),
+		"keyCount", s.keyCountSynced.String(),
+	)
+}
+
 // Run until a signal is received, this function won't block
 func (s *Syncer) Run(stop <-chan struct{}) {
 	s.zk.SetCallback(s.callback)
@@ -76,21 +98,12 @@ func (s *Syncer) Run(stop <-chan struct{}) {
 
 	// 全量同步一次
 	s.Info("start full sync")
-	before := time.Now()
-	for _, prefix := range s.zkPrefix {
-		s.syncKeyRecursive(prefix)
-	}
-	cost := time.Since(before)
-	s.Infow("full sync completed",
-		"cost", cost.String(),
-		"keyCount", s.keyCountSynced.String(),
-	)
+	s.FullSync()
+
 
 	// 继续同步增量
-	s.Info("start incremental sync")
-	for _, prefix := range s.zkPrefix {
-		s.syncWatch(prefix, stop)
-	}
+	s.SyncIncremental(stop)
+
 }
 
 func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
