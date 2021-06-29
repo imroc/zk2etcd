@@ -10,6 +10,7 @@ import (
 func newDiffCmd(args []string) *cobra.Command {
 	var common Common
 	var concurrent uint
+	var fix bool
 
 	cmd := &cobra.Command{
 		Use:   "diff",
@@ -23,6 +24,9 @@ func newDiffCmd(args []string) *cobra.Command {
 			before := time.Now()
 			d.Run()
 			d.PrintSummary()
+			if fix {
+				d.Fix()
+			}
 			cost := time.Since(before)
 			fmt.Println("total cost: ", cost)
 		},
@@ -31,5 +35,6 @@ func newDiffCmd(args []string) *cobra.Command {
 	cmd.SetArgs(args)
 	common.AddFlags(cmd.Flags())
 	cmd.Flags().UintVar(&concurrent, "concurrent", 50, "the concurreny of syncing worker")
+	cmd.Flags().BoolVar(&fix, "fix", false, "set to true will fix the data diff between zk and etcd")
 	return cmd
 }
