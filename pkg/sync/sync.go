@@ -63,7 +63,7 @@ func (s *Syncer) SyncIncremental(stop <-chan struct{}) {
 	s.Info("start incremental sync")
 
 	for _, prefix := range s.zkPrefix {
-		s.syncWatch(prefix, stop)
+		s.syncWatchRecursive(prefix, stop)
 	}
 }
 
@@ -118,14 +118,22 @@ func (s *Syncer) StartFullSyncInterval() {
 	if s.fullSyncInterval <= 0 {
 		return
 	}
-	for range time.Tick(s.fullSyncInterval) {
-		s.FullSync()
-	}
+	go func() {
+		for range time.Tick(s.fullSyncInterval) {
+			s.FullSync()
+		}
+	}()
 }
 
 func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 	s.m.Store(key, true)
+	s.Debugw("before watching children",
+		"key", key,
+	)
 	children, ch := s.zk.ListW(key)
+	s.Debugw("after watching children",
+		"key", key,
+	)
 	if ch != nil {
 		go func() {
 			for {
@@ -150,7 +158,7 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 						for _, child := range children {
 							_, ok := s.m.Load(filepath.Join(key, child))
 							if !ok {
-								s.syncWatch(filepath.Join(key, child), stop)
+								s.syncWatchRecursive(filepath.Join(key, child), stop)
 							}
 						}
 					}
@@ -159,11 +167,16 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 				}
 			}
 		}()
+	} else {
+		s.Warnw("got nil channel from list children watch",
+			"key", key,
+			"children", children,
+		)
 	}
 	return children
 }
 
-func (s *Syncer) syncWatch(key string, stop <-chan struct{}) {
+func (s *Syncer) syncWatchRecursive(key string, stop <-chan struct{}) {
 	if s.shouldExclude(key) {
 		return
 	}
@@ -173,7 +186,7 @@ func (s *Syncer) syncWatch(key string, stop <-chan struct{}) {
 
 	// watch children recursively
 	for _, child := range children {
-		s.syncWatch(filepath.Join(key, child), stop)
+		s.syncWatchRecursive(filepath.Join(key, child), stop)
 	}
 }
 
@@ -242,7 +255,7 @@ func (s *Syncer) syncKey(key string) {
 		)
 		s.etcd.Put(key, zkValue)
 	default:
-		s.Warnw("not match",
+		s.Warnw("syncKey not match",
 			"key", key,
 			"existInZK", existInZK,
 			"existInEtcd", existInEtcd,
