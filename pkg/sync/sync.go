@@ -82,11 +82,7 @@ func (s *Syncer) FullSync() {
 	)
 }
 
-// Run until a signal is received, this function won't block
-func (s *Syncer) Run(stop <-chan struct{}) {
-	s.zk.SetCallback(s.callback)
-
-	// 检查 zk 和 etcd
+func (s *Syncer) ensureClients() {
 	s.Debugw("check zk")
 	for _, prefix := range s.zkPrefix {
 		s.zk.EnsureExists(prefix)
@@ -95,6 +91,14 @@ func (s *Syncer) Run(stop <-chan struct{}) {
 	s.Debugw("check etcd")
 	s.etcd.Get("/")
 	s.Info("check etcd success")
+}
+
+// Run until a signal is received, this function won't block
+func (s *Syncer) Run(stop <-chan struct{}) {
+	s.zk.SetCallback(s.callback)
+
+	// 检查 zk 和 etcd
+	s.ensureClients()
 
 	// 启动 worker
 	s.startWorker()
