@@ -22,6 +22,7 @@ func newDiffCmd(args []string) *cobra.Command {
 			d := diff.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, logger, concurrent)
 			before := time.Now()
 			d.Run()
+			d.PrintSummary()
 			cost := time.Since(before)
 			fmt.Println("total cost: ", cost)
 		},

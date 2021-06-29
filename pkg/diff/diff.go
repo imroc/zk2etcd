@@ -46,14 +46,6 @@ func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *e
 
 func (d *Diff) starDiffWorkers() {
 
-	go func() {
-		for range time.Tick(2 * time.Second) {
-			d.Infow("status refresh",
-				"count", d.zkKeyCount.String(),
-			)
-		}
-	}()
-
 	d.Infow("start worker",
 		"concurrency", d.concurrency,
 	)
@@ -131,7 +123,28 @@ func (d *Diff) Run() {
 	for k, _ := range d.etcdKeys {
 		d.extra = append(d.extra, k)
 	}
+	d.etcdKeys = nil
+}
 
+func (d *Diff) Fix() {
+	// 删除 etcd 多余的 key
+	for _, key := range d.extra {
+		d.etcd.Delete(key, false)
+	}
+	// 补齐 etcd 缺失的 key
+	for _, key := range d.missed {
+		value, ok := d.zk.Get(key)
+		if !ok {
+			d.Errorw("try add etcd key but not exist in zk",
+				"key", key,
+			)
+			continue
+		}
+		d.etcd.Put(key, value)
+	}
+}
+
+func (d *Diff) PrintSummary() {
 	// 输出统计
 	fmt.Println("zookeeper key count:", d.zkKeyCount.String())
 	fmt.Println("etcd key count:", d.etcdKeyCount)

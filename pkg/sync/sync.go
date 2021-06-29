@@ -2,6 +2,7 @@ package sync
 
 import (
 	"github.com/go-zookeeper/zk"
+	"github.com/imroc/zk2etcd/pkg/diff"
 	"github.com/imroc/zk2etcd/pkg/etcd"
 	"github.com/imroc/zk2etcd/pkg/log"
 	"github.com/imroc/zk2etcd/pkg/zookeeper"
@@ -11,6 +12,30 @@ import (
 	"sync"
 	"time"
 )
+
+//type keyState struct {
+//	Create bool
+//	Watch  bool
+//}
+//
+//type KeyState struct {
+//	store map[string]keyState
+//	lock  sync.Mutex
+//}
+//
+//func (ks KeyState) IsCreated(key string) bool {
+//	if s, ok := ks[key]; ok && s.Create {
+//		return true
+//	}
+//	return false
+//}
+//
+//func (ks KeyState) AddWatch(key string) {
+//	s, ok := ks[key]
+//	if !ok {
+//
+//	}
+//}
 
 type Syncer struct {
 	*log.Logger
@@ -25,9 +50,10 @@ type Syncer struct {
 	fullSyncInterval time.Duration
 	watcher          map[string]struct{}
 	watcherLock      sync.Mutex
+	stop             <-chan struct{}
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint, fullSyncInterval time.Duration) *Syncer {
+func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint, fullSyncInterval time.Duration, stop <-chan struct{}) *Syncer {
 	return &Syncer{
 		zk:               zkClient,
 		zkPrefix:         zkPrefix,
@@ -38,6 +64,7 @@ func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *e
 		keysToSync:       make(chan string, concurrency),
 		fullSyncInterval: fullSyncInterval,
 		watcher:          make(map[string]struct{}),
+		stop:             stop,
 	}
 }
 
@@ -62,11 +89,11 @@ func (s *Syncer) startWorker() {
 	}
 }
 
-func (s *Syncer) SyncIncremental(stop <-chan struct{}) {
+func (s *Syncer) SyncIncremental() {
 	s.Info("start incremental sync")
 
 	for _, prefix := range s.zkPrefix {
-		s.syncWatchRecursive(prefix, stop)
+		s.syncWatchRecursive(prefix, s.stop)
 	}
 }
 
@@ -74,14 +101,14 @@ func (s *Syncer) FullSync() {
 	s.Info("start full sync")
 	before := time.Now()
 
-	for _, prefix := range s.zkPrefix {
-		s.syncKeyRecursive(prefix)
-	}
+	d := diff.New(s.zk, s.zkPrefix, s.zkExcludePrefix, s.etcd, s.Logger, s.concurrency)
+
+	d.Run()
+	d.Fix()
 
 	cost := time.Since(before)
 	s.Infow("full sync completed",
 		"cost", cost.String(),
-		"keyCount", s.keyCountSynced.String(),
 	)
 }
 
@@ -97,7 +124,7 @@ func (s *Syncer) ensureClients() {
 }
 
 // Run until a signal is received, this function won't block
-func (s *Syncer) Run(stop <-chan struct{}) {
+func (s *Syncer) Run() {
 
 	// 检查 zk 和 etcd
 	s.ensureClients()
@@ -112,7 +139,7 @@ func (s *Syncer) Run(stop <-chan struct{}) {
 	s.StartFullSyncInterval()
 
 	// 继续同步增量
-	s.SyncIncremental(stop)
+	s.SyncIncremental()
 
 }
 
@@ -129,7 +156,8 @@ func (s *Syncer) StartFullSyncInterval() {
 
 func (s *Syncer) removeWatch(key string) {
 	s.watcherLock.Lock()
-	if _, ok := s.watcher[key]; !ok {
+	_, ok := s.watcher[key]
+	if !ok {
 		s.Warnw("remove watch but watcher does not exist",
 			"key", key,
 		)
@@ -149,7 +177,7 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 	)
 	switch event.Type {
 	case zk.EventNodeDeleted:
-		s.etcd.Delete(event.Path)
+		s.etcd.DeleteWithPrefix(event.Path)
 		s.removeWatch(event.Path)
 		return false
 	case zk.EventNodeChildrenChanged:
@@ -274,11 +302,12 @@ func (s *Syncer) syncKey(key string) {
 			"value", zkValue,
 		)
 		s.etcd.Put(key, zkValue)
+		s.syncWatchRecursive(key, s.stop) // 可能是新增的，确保 watch 下
 	case !existInZK && existInEtcd: // etcd 中多出 key，删除
 		s.Debugw("key not exist in zk, remove in etcd",
 			"key", key,
 		)
-		s.etcd.Delete(key)
+		s.etcd.DeleteWithPrefix(key)
 	case existInZK && existInEtcd && (zkValue != etcdValue): // key 都存在，但 value 不同，纠正 etcd 中的 value
 		s.Debugw("value differs",
 			"key", key,
@@ -287,7 +316,7 @@ func (s *Syncer) syncKey(key string) {
 		)
 		s.etcd.Put(key, zkValue)
 	default:
-		s.Warnw("syncKey not match",
+		s.Debugw("sync ignore",
 			"key", key,
 			"existInZK", existInZK,
 			"existInEtcd", existInEtcd,

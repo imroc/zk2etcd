@@ -68,19 +68,28 @@ func (c *Client) Put(key, value string) {
 	}
 }
 
-func (c *Client) Delete(key string) {
+func (c *Client) Delete(key string, prefix bool) {
 	c.Debugw("etcd delete key",
 		"key", key,
+		"withPrefix", prefix,
 	)
-	_, err := c.Client.Delete(timeoutContext(), key, clientv3.WithPrefix())
+	opts := []clientv3.OpOption{}
+	if prefix {
+		opts = append(opts, clientv3.WithPrefix())
+	}
+	_, err := c.Client.Delete(timeoutContext(), key, opts...)
 	for err != nil {
 		c.Errorw("etcd failed to delete",
 			"key", key,
 			"error", err,
 		)
 		time.Sleep(time.Second)
-		_, err = c.Client.Delete(timeoutContext(), key, clientv3.WithPrefix())
+		_, err = c.Client.Delete(timeoutContext(), key, opts...)
 	}
+}
+
+func (c *Client) DeleteWithPrefix(key string) {
+	c.Delete(key, true)
 }
 
 func (c *Client) Get(key string) (value string, ok bool) {

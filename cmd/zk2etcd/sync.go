@@ -24,8 +24,8 @@ func newSyncCmd(args []string) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			zkClient, etcdClient, logger, zkPrefixes, zkExcludePrefixes := common.GetAll()
 
-			s := sync.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, logger, concurrent, fullSyncInterval)
-			go s.Run(stopChan)
+			s := sync.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, logger, concurrent, fullSyncInterval, stopChan)
+			go s.Run()
 
 			// TODO: 实现真正优雅停止
 			signalChan := make(chan os.Signal, 1)
