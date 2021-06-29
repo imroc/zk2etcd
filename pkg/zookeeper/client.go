@@ -61,8 +61,15 @@ func (c *Client) getWatchConn() *zk.Conn {
 	return c.watchConn
 }
 
-func (c *Client) Exists(key string) bool {
-	exsits, _, err := c.getConn().Exists(key)
+func (c *Client) Exists(key string) (exist bool) {
+	defer func() {
+		c.Debugw("check zk exsit",
+			"key", key,
+			"exist", exist,
+		)
+	}()
+	var err error
+	exist, _, err = c.getConn().Exists(key)
 	for err != nil {
 		c.Errorw("zk check exists failed",
 			"key", key,
@@ -70,7 +77,7 @@ func (c *Client) Exists(key string) bool {
 		)
 		time.Sleep(time.Second)
 	}
-	return exsits
+	return
 }
 
 func (c *Client) Create(key string) {
@@ -85,8 +92,15 @@ func (c *Client) Create(key string) {
 	}
 }
 
-func (c *Client) Get(key string) (string, bool) {
-	value, _, err := c.getConn().Get(key)
+func (c *Client) Get(key string) (value string, exist bool) {
+	defer func() {
+		c.Debugw("zk get",
+			"key", key,
+			"value", value,
+			"exist", exist,
+		)
+	}()
+	v, _, err := c.getConn().Get(key)
 	for err != nil {
 		if err == zk.ErrNoNode {
 			return "", false
@@ -97,15 +111,16 @@ func (c *Client) Get(key string) (string, bool) {
 		)
 		time.Sleep(time.Second)
 	}
-	c.Debugw("zk get",
-		"key", key,
-		"value", value,
-	)
-	return string(value), true
+	value = string(v)
+	exist = true
+	return
 }
 
 // Delete 暂时不用
 func (c *Client) Delete(key string) {
+	c.Debugw("zk delete",
+		"key", key,
+	)
 	_, s, err := c.getConn().Get(key)
 	for err != nil {
 		c.Errorw("zk delete failed",

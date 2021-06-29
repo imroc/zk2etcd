@@ -131,6 +131,10 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 			for {
 				select {
 				case event := <-ch:
+					s.Infow("received event",
+						"event", event,
+						"parent", key,
+					)
 					if event.Type == zk.EventNodeDeleted {
 						s.m.Delete(key)
 						s.etcd.Delete(key)
@@ -216,21 +220,35 @@ func (s *Syncer) syncKey(key string) {
 		"key", key,
 	)
 	defer s.keyCountSynced.Inc()
-	zkValue, ok := s.zk.Get(key)
-	etcdValue, exist := s.etcd.Get(key)
-	if exist { // etcd 中 key 存在
-		if !ok { // zk 中 key 不存在，删除 etcd 中对应 key
-			s.etcd.Delete(key)
-			return
-		}
-		if zkValue != etcdValue { // zk 与 etcd 的 key 都存在，但 value 不同，更新下 etcd
-			s.etcd.Put(key, zkValue)
-		}
-		// key与value相同，忽略
-	} else {    // etcd key 不存在
-		if ok { // zk key 存在，etcd 补数据
-			s.etcd.Put(key, zkValue)
-		}
+	zkValue, existInZK := s.zk.Get(key)
+	etcdValue, existInEtcd := s.etcd.Get(key)
+	switch {
+	case existInZK && !existInEtcd: // etcd 中缺失，补齐
+		s.Debugw("key not exist in etcd, put in etcd",
+			"key", key,
+			"value", zkValue,
+		)
+		s.etcd.Put(key, zkValue)
+	case !existInZK && existInEtcd: // etcd 中多出 key，删除
+		s.Debugw("key not exist in zk, remove in etcd",
+			"key", key,
+		)
+		s.etcd.Delete(key)
+	case existInZK && existInEtcd && (zkValue != etcdValue): // key 都存在，但 value 不同，纠正 etcd 中的 value
+		s.Debugw("value differs",
+			"key", key,
+			"zkValue", zkValue,
+			"etcdValue", etcdValue,
+		)
+		s.etcd.Put(key, zkValue)
+	default:
+		s.Warnw("not match",
+			"key", key,
+			"existInZK", existInZK,
+			"existInEtcd", existInEtcd,
+			"zkValue", zkValue,
+			"etcdValue", etcdValue,
+		)
 	}
 }
 

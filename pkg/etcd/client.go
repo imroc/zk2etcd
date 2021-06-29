@@ -52,6 +52,10 @@ func (c *Client) init() error {
 }
 
 func (c *Client) Put(key, value string) {
+	c.Debugw("etcd put",
+		"key", key,
+		"value", value,
+	)
 	_, err := c.Client.Put(timeoutContext(), key, value)
 	for err != nil {
 		c.Errorw("etcd failed to put",
@@ -65,7 +69,7 @@ func (c *Client) Put(key, value string) {
 }
 
 func (c *Client) Delete(key string) {
-	c.Infow("etcd delete key",
+	c.Debugw("etcd delete key",
 		"key", key,
 	)
 	_, err := c.Client.Delete(timeoutContext(), key, clientv3.WithPrefix())
@@ -79,8 +83,17 @@ func (c *Client) Delete(key string) {
 	}
 }
 
-func (c *Client) Get(key string) (string, bool) {
+func (c *Client) Get(key string) (value string, ok bool) {
+	defer func() {
+		c.Debugw("etcd get",
+			"key", key,
+			"value", value,
+			"exist", ok,
+		)
+	}()
+
 	resp, err := c.Client.Get(timeoutContext(), key)
+
 	for err != nil {
 		c.Errorw("etcd failed to get",
 			"key", key,
@@ -90,9 +103,10 @@ func (c *Client) Get(key string) (string, bool) {
 		resp, err = c.Client.Get(timeoutContext(), key)
 	}
 	if len(resp.Kvs) != 0 {
-		return string(resp.Kvs[0].Value), true
+		value = string(resp.Kvs[0].Value)
+		ok = true
 	}
-	return "", false
+	return
 }
 
 func (c *Client) ListAllKeys(key string) []string {
@@ -109,5 +123,8 @@ func (c *Client) ListAllKeys(key string) []string {
 	for _, kvs := range resp.Kvs {
 		keys = append(keys, string(kvs.Key))
 	}
+	c.Debugw("etcd list all",
+		"prefix", key,
+	)
 	return keys
 }
