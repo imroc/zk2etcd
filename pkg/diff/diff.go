@@ -140,22 +140,58 @@ func (d *Diff) Run() {
 	d.etcdKeys = nil
 }
 
+func (d *Diff) conDo(cocurrent int, keys []string, doFunc func(string)) {
+	if len(keys) == 0 {
+		return
+	}
+
+	if cocurrent > len(keys) {
+		cocurrent = len(keys)
+	}
+
+	var wg sync.WaitGroup
+	ch := make(chan string, cocurrent)
+	stop := make(chan struct{})
+
+	for i := 0; i < cocurrent; i++ {
+		go func() {
+			for {
+				select {
+				case key := <-ch:
+					doFunc(key)
+					wg.Done()
+				case <-stop:
+					return
+				}
+			}
+		}()
+	}
+
+	for _, key := range keys {
+		wg.Add(1)
+		ch <- key
+	}
+	wg.Wait()
+	close(stop)
+}
+
 func (d *Diff) Fix() {
 	// 删除 etcd 多余的 key
-	for _, key := range d.extra {
+	d.conDo(int(d.concurrency), d.extra, func(key string) {
 		d.etcd.Delete(key, false)
-	}
+	})
+
 	// 补齐 etcd 缺失的 key
-	for _, key := range d.missed {
+	d.conDo(int(d.concurrency), d.missed, func(key string) {
 		value, ok := d.zk.Get(key)
 		if !ok {
 			d.Errorw("try add etcd key but not exist in zk",
 				"key", key,
 			)
-			continue
+			return
 		}
 		d.etcd.Put(key, value)
-	}
+	})
 }
 
 func (d *Diff) PrintSummary() {
