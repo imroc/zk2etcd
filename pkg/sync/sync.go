@@ -72,13 +72,13 @@ func (s *Syncer) startWorker() {
 	s.Info("start worker",
 		"concurrency", s.concurrency,
 	)
-	go func() {
-		for range time.Tick(1 * time.Second) {
-			s.Infow("synced key count",
-				"count", s.keyCountSynced.String(),
-			)
-		}
-	}()
+	//go func() {
+	//	for range time.Tick(1 * time.Second) {
+	//		s.Infow("synced key count",
+	//			"count", s.keyCountSynced.String(),
+	//		)
+	//	}
+	//}()
 	for i := uint(0); i < s.concurrency; i++ {
 		go func() {
 			for {
@@ -103,8 +103,26 @@ func (s *Syncer) FullSync() {
 
 	d := diff.New(s.zk, s.zkPrefix, s.zkExcludePrefix, s.etcd, s.Logger, s.concurrency)
 
+	//complete := false
+	//go func() {
+	//	tick := time.Tick(3 * time.Second)
+	//	for range tick {
+	//		s.Infow("full sync diff progress",
+	//			"currentKeyCount", d.GetKeyCount(),
+	//		)
+	//		if complete {
+	//			return
+	//		}
+	//	}
+	//}()
+	s.Info("start full sync diff")
 	d.Run()
+	s.Info("complete full sync diff")
+	//complete = true
+
+	s.Info("start full sync fix")
 	d.Fix()
+	s.Info("complete full sync fix")
 
 	cost := time.Since(before)
 	s.Infow("full sync completed",
@@ -222,7 +240,6 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 			case event := <-ch:
 				shouldContinue := s.handleEvent(event)
 				if !shouldContinue {
-					s.removeWatch(event.Path)
 					return
 				}
 				children, ch = s.zk.ListW(key)

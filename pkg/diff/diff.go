@@ -29,6 +29,7 @@ type Diff struct {
 	keys            chan string
 	etcdKeys        map[string]bool
 	workerWg        sync.WaitGroup
+	stopChan        chan struct{}
 }
 
 func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint) *Diff {
@@ -41,7 +42,12 @@ func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *e
 		concurrency:     concurrency,
 		etcdKeys:        map[string]bool{},
 		keys:            make(chan string, concurrency*2),
+		stopChan:        make(chan struct{}),
 	}
+}
+
+func (d *Diff) GetKeyCount() string {
+	return d.zkKeyCount.String()
 }
 
 func (d *Diff) starDiffWorkers() {
@@ -51,8 +57,14 @@ func (d *Diff) starDiffWorkers() {
 	)
 	for i := uint(0); i < d.concurrency; i++ { // handle key
 		go func() {
-			for key := range d.keys {
-				d.handleKey(key)
+			for {
+				select {
+				case key := <-d.keys:
+					d.handleKey(key)
+				case <-d.stopChan:
+					d.Debug("stop diff worker")
+					return
+				}
 			}
 		}()
 	}
@@ -119,6 +131,8 @@ func (d *Diff) Run() {
 
 	time.Sleep(time.Second)
 	d.workerWg.Wait()
+
+	close(d.stopChan)
 
 	for k, _ := range d.etcdKeys {
 		d.extra = append(d.extra, k)
