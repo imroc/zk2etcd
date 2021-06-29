@@ -1,5 +1,13 @@
 # zk2etcd 变更历史
 
+## v0.12.0 (2021.06.29)
+
+* `zk2etcd sync` 支持定期全量检测来订正，通过 `--fullsync-interval` 自定义周期，默认 `5m`
+* 增强 watch 机制，确保新增的 node 也能被 watch
+* 全量检测并订正的机制改用 diff 判断 zk 与 etcd 之间的差异 (zk 与 etcd v3 存储机制不同，zk 树状而 etcd 是扁平，无法使用类似 list children 的方式来对比子节点差异)
+* 优化判断逻辑
+* 丰富debug日志
+
 ## v0.11.0 (2021.06.28)
 
 * 抽离同步逻辑到单独子命令 `zk2etcd sync`
@@ -11,7 +19,6 @@
 * 定时打印已同步/已比较的进度及其耗时信息
 * 修复diff hang死的bug
 * 修改 sync 默认并发 20 --> 50
-
 
 ## v0.10.0 (2021.06.26)
 
@@ -38,10 +45,10 @@
 
 * 支持同步删除，保证数据一致性
 * 优化命令行参数
-  * etcdAddr-->etcd-servers
-  * zkAddr-->zookeeper-servers
-  * zkPrefix-->zookeeper-prefix
-  * 优化 description
+    * etcdAddr-->etcd-servers
+    * zkAddr-->zookeeper-servers
+    * zkPrefix-->zookeeper-prefix
+    * 优化 description
 
 ## v0.5.0 (2021.06.25)
 
