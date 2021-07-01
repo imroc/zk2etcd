@@ -6,36 +6,14 @@ import (
 	"github.com/imroc/zk2etcd/pkg/etcd"
 	"github.com/imroc/zk2etcd/pkg/log"
 	"github.com/imroc/zk2etcd/pkg/zookeeper"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/atomic"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
-
-//type keyState struct {
-//	Create bool
-//	Watch  bool
-//}
-//
-//type KeyState struct {
-//	store map[string]keyState
-//	lock  sync.Mutex
-//}
-//
-//func (ks KeyState) IsCreated(key string) bool {
-//	if s, ok := ks[key]; ok && s.Create {
-//		return true
-//	}
-//	return false
-//}
-//
-//func (ks KeyState) AddWatch(key string) {
-//	s, ok := ks[key]
-//	if !ok {
-//
-//	}
-//}
 
 type Syncer struct {
 	*log.Logger
@@ -72,13 +50,7 @@ func (s *Syncer) startWorker() {
 	s.Info("start worker",
 		"concurrency", s.concurrency,
 	)
-	//go func() {
-	//	for range time.Tick(1 * time.Second) {
-	//		s.Infow("synced key count",
-	//			"count", s.keyCountSynced.String(),
-	//		)
-	//	}
-	//}()
+
 	for i := uint(0); i < s.concurrency; i++ {
 		go func() {
 			for {
@@ -103,22 +75,9 @@ func (s *Syncer) FullSync() {
 
 	d := diff.New(s.zk, s.zkPrefix, s.zkExcludePrefix, s.etcd, s.Logger, s.concurrency)
 
-	//complete := false
-	//go func() {
-	//	tick := time.Tick(3 * time.Second)
-	//	for range tick {
-	//		s.Infow("full sync diff progress",
-	//			"currentKeyCount", d.GetKeyCount(),
-	//		)
-	//		if complete {
-	//			return
-	//		}
-	//	}
-	//}()
 	s.Info("start full sync diff")
 	d.Run()
 	s.Info("complete full sync diff")
-	//complete = true
 
 	s.Info("start full sync fix")
 	d.Fix()
@@ -141,8 +100,21 @@ func (s *Syncer) ensureClients() {
 	s.Info("check etcd success")
 }
 
+func (s *Syncer) startHttpServer() {
+	http.Handle("/metrics", promhttp.Handler())
+	err := http.ListenAndServe(":80", nil)
+	if err != nil {
+		s.Fatalw("http listen failed",
+			"error", err.Error(),
+		)
+	}
+}
+
 // Run until a signal is received, this function won't block
 func (s *Syncer) Run() {
+
+	// 启动 metrics server
+	go s.startHttpServer()
 
 	// 检查 zk 和 etcd
 	s.ensureClients()

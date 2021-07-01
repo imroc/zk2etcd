@@ -4,9 +4,33 @@ import (
 	"context"
 	"crypto/tls"
 	"github.com/imroc/zk2etcd/pkg/log"
+	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"time"
 )
+
+var (
+	EtcdOp = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zk2etcd_etcd_op_total",
+			Help: "Number of the etcd operation",
+		},
+		[]string{"op", "status"},
+	)
+	EtcdOpDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "zk2etcd_etcd_op_duration_seconds",
+			Help:    "Duration in seconds of etcd operation",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"op", "status"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(EtcdOp)
+	prometheus.MustRegister(EtcdOpDuration)
+}
 
 var defaultTimeout = 5 * time.Second
 
@@ -51,24 +75,36 @@ func (c *Client) init() error {
 	return nil
 }
 
-func (c *Client) Put(key, value string) {
+func (c *Client) put(key, value string) error {
+	before := time.Now()
 	c.Debugw("etcd put",
 		"key", key,
 		"value", value,
 	)
 	_, err := c.Client.Put(timeoutContext(), key, value)
-	for err != nil {
-		c.Errorw("etcd failed to put",
+	cost := time.Since(before)
+	status := "success"
+	if err != nil {
+		status = err.Error()
+		c.Errorw("etcd put failed",
 			"key", key,
-			"value", value,
-			"error", err,
+			"error", err.Error(),
 		)
+	}
+	EtcdOp.WithLabelValues("put", status).Inc()
+	EtcdOpDuration.WithLabelValues("put", status).Observe(float64(time.Duration(cost) / time.Second))
+	return err
+}
+
+func (c *Client) Put(key, value string) {
+	err := c.put(key, value)
+	for err != nil {
 		time.Sleep(time.Second)
-		_, err = c.Client.Put(timeoutContext(), key, value)
+		err = c.put(key, value)
 	}
 }
 
-func (c *Client) Delete(key string, prefix bool) {
+func (c *Client) delete(key string, prefix bool) error {
 	c.Debugw("etcd delete key",
 		"key", key,
 		"withPrefix", prefix,
@@ -77,14 +113,27 @@ func (c *Client) Delete(key string, prefix bool) {
 	if prefix {
 		opts = append(opts, clientv3.WithPrefix())
 	}
+	before := time.Now()
 	_, err := c.Client.Delete(timeoutContext(), key, opts...)
-	for err != nil {
-		c.Errorw("etcd failed to delete",
+	cost := time.Since(before)
+	status := "success"
+	if err != nil {
+		status = err.Error()
+		c.Errorw("etcd delete failed",
 			"key", key,
-			"error", err,
+			"error", err.Error(),
 		)
+	}
+	EtcdOp.WithLabelValues("delete", status).Inc()
+	EtcdOpDuration.WithLabelValues("delete", status).Observe(float64(time.Duration(cost) / time.Second))
+	return err
+}
+
+func (c *Client) Delete(key string, prefix bool) {
+	err := c.delete(key, prefix)
+	for err != nil {
 		time.Sleep(time.Second)
-		_, err = c.Client.Delete(timeoutContext(), key, opts...)
+		err = c.delete(key, prefix)
 	}
 }
 
@@ -92,7 +141,7 @@ func (c *Client) DeleteWithPrefix(key string) {
 	c.Delete(key, true)
 }
 
-func (c *Client) Get(key string) (value string, ok bool) {
+func (c *Client) get(key string) (value string, ok bool, err error) {
 	defer func() {
 		c.Debugw("etcd get",
 			"key", key,
@@ -101,39 +150,75 @@ func (c *Client) Get(key string) (value string, ok bool) {
 		)
 	}()
 
+	before := time.Now()
 	resp, err := c.Client.Get(timeoutContext(), key)
+	cost := time.Since(before)
+	status := "success"
 
-	for err != nil {
-		c.Errorw("etcd failed to get",
+	if err != nil {
+		status = err.Error()
+		c.Errorw("etcd get failed",
 			"key", key,
-			"error", err,
+			"error", err.Error(),
 		)
-		time.Sleep(time.Second)
-		resp, err = c.Client.Get(timeoutContext(), key)
 	}
-	if len(resp.Kvs) != 0 {
+	EtcdOp.WithLabelValues("get", status).Inc()
+	EtcdOpDuration.WithLabelValues("get", status).Observe(float64(time.Duration(cost) / time.Second))
+
+	if err == nil && len(resp.Kvs) != 0 {
 		value = string(resp.Kvs[0].Value)
 		ok = true
 	}
 	return
 }
 
-func (c *Client) ListAllKeys(key string) []string {
-	resp, err := c.Client.Get(timeoutContext(), key, clientv3.WithPrefix())
+func (c *Client) Get(key string) (value string, ok bool) {
+	value, ok, err := c.get(key)
 	for err != nil {
+		time.Sleep(time.Second)
+		value, ok, err = c.get(key)
+	}
+	return
+}
+
+func (c *Client) list(key string) ([]string, error) {
+	c.Debugw("etcd list all",
+		"prefix", key,
+	)
+
+	before := time.Now()
+	resp, err := c.Client.Get(timeoutContext(), key, clientv3.WithPrefix())
+	cost := time.Since(before)
+
+	status := "success"
+	if err != nil {
 		c.Errorw("etcd failed to get",
 			"key", key,
 			"error", err,
 		)
-		time.Sleep(time.Second)
-		resp, err = c.Client.Get(timeoutContext(), key)
+		status = err.Error()
 	}
+
+	EtcdOp.WithLabelValues("list", status).Inc()
+	EtcdOpDuration.WithLabelValues("list", status).Observe(float64(time.Duration(cost) / time.Second))
+
+	if err != nil {
+		return nil, err
+	}
+
 	keys := []string{}
 	for _, kvs := range resp.Kvs {
 		keys = append(keys, string(kvs.Key))
 	}
-	c.Debugw("etcd list all",
-		"prefix", key,
-	)
+
+	return keys, err
+}
+
+func (c *Client) ListAllKeys(key string) []string {
+	keys, err := c.list(key)
+	for err != nil {
+		time.Sleep(time.Second)
+		keys, err = c.list(key)
+	}
 	return keys
 }
