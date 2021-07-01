@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"github.com/imroc/zk2etcd/pkg/log"
+	"github.com/imroc/zk2etcd/pkg/util/try"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"time"
@@ -96,12 +97,18 @@ func (c *Client) put(key, value string) error {
 	return err
 }
 
+func (c *Client) do(fn func() bool) {
+	try.Do(fn, 3, time.Second)
+}
+
 func (c *Client) Put(key, value string) {
-	err := c.put(key, value)
-	for err != nil {
-		time.Sleep(time.Second)
-		err = c.put(key, value)
-	}
+	c.do(func() bool {
+		err := c.put(key, value)
+		if err != nil {
+			return false
+		}
+		return true
+	})
 }
 
 func (c *Client) delete(key string, prefix bool) error {
@@ -130,11 +137,13 @@ func (c *Client) delete(key string, prefix bool) error {
 }
 
 func (c *Client) Delete(key string, prefix bool) {
-	err := c.delete(key, prefix)
-	for err != nil {
-		time.Sleep(time.Second)
-		err = c.delete(key, prefix)
-	}
+	c.do(func() bool {
+		err := c.delete(key, prefix)
+		if err != nil {
+			return false
+		}
+		return true
+	})
 }
 
 func (c *Client) DeleteWithPrefix(key string) {
@@ -173,16 +182,19 @@ func (c *Client) get(key string) (value string, ok bool, err error) {
 }
 
 func (c *Client) Get(key string) (value string, ok bool) {
-	value, ok, err := c.get(key)
-	for err != nil {
-		time.Sleep(time.Second)
+	c.do(func() bool {
+		var err error
 		value, ok, err = c.get(key)
-	}
+		if err != nil {
+			return false
+		}
+		return true
+	})
 	return
 }
 
 func (c *Client) list(key string) ([]string, error) {
-	c.Debugw("etcd list all",
+	c.Debugw("etcd list",
 		"prefix", key,
 	)
 
@@ -214,11 +226,14 @@ func (c *Client) list(key string) ([]string, error) {
 	return keys, err
 }
 
-func (c *Client) ListAllKeys(key string) []string {
-	keys, err := c.list(key)
-	for err != nil {
-		time.Sleep(time.Second)
+func (c *Client) ListAllKeys(key string) (keys []string) {
+	c.do(func() bool {
+		var err error
 		keys, err = c.list(key)
-	}
-	return keys
+		if err != nil {
+			return false
+		}
+		return true
+	})
+	return
 }
