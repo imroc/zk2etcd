@@ -18,6 +18,28 @@ zk2etcd 是一款同步 zookeeper 数据到 etcd 的工具
 
 参考 [CHANGELOG](CHANGELOG.md)
 
+## 监控 metrics
+
+zk2etcd 通过 80 端口 (暂时写死) 暴露 metrics，路径 `/metrics`，包含以下 metrics:
+* zk2etcd_etcd_op_total: etcd 操作次数统计，以下是示例 promql
+  * 统计etcd写入次数: sum(irate(zk2etcd_etcd_op_total{op="put"}[2m]))
+  * 统计etcd删除次数: sum(irate(zk2etcd_etcd_op_total{op="delete"}[2m]))
+  * etcd 操作失败统计: sum by (status,op)(rate(zk2etcd_etcd_op_total{status!="success"}[1m]))
+* zk2etcd_etcd_op_duration_seconds: etcd操作时延统计，以下是示例 promql
+  * etcd p95时延: histogram_quantile(0.95, sum(rate(zk2etcd_etcd_op_duration_seconds_bucket[1m])) by (le))
+  * etcd p99时延:  histogram_quantile(0.99, sum(rate(zk2etcd_etcd_op_duration_seconds_bucket[1m])) by (le))
+* zk2etcd_zk_op_total: zk 操作次数统计，以下是示例 promql
+  * zk 操作失败统计: sum by (status,op)(rate(zk2etcd_zk_op_total{status!="success"}[1m]))
+  * zk 各类型操作 rps: sum by (op) (irate(zk2etcd_zk_op_total[2m]))
+* zk2etcd_zk_op_duration_seconds: zk操作时延统计，以下是示例 promql
+  * zk p95时延: histogram_quantile(0.95, sum(rate(zk2etcd_zk_op_duration_seconds_bucket[1m])) by (le))
+  * zk p99时延: histogram_quantile(0.99, sum(rate(zk2etcd_zk_op_duration_seconds_bucket[1m])) by (le))
+  
+grafana 面板示例:
+
+![](docs/1.png)
+![](docs/2.png)
+
 ## 迭代计划
 
 * [x] 全量同步
