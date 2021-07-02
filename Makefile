@@ -11,7 +11,7 @@ push:
 
 .PHONY: sync
 sync:
-	go run cmd/zk2etcd/*.go sync --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level info --fullsync-interval 20s
+	go run cmd/zk2etcd/*.go sync --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level info --fullsync-interval 1m
 
 .PHONY: diff
 diff:

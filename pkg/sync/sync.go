@@ -173,6 +173,15 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 	case zk.EventNodeChildrenChanged:
 		s.syncChildren(event.Path)
 		return true
+	case zk.EventNotWatching:
+		s.Warnw("received zk not watching event",
+			"type", event.Type.String(),
+			"state", event.State.String(),
+			"error", event.Err,
+			"path", event.Path,
+		)
+		s.zk.ReConnect()
+		return true
 	default:
 		s.Warnw("unknown event",
 			"type", event.Type.String(),

@@ -3,10 +3,38 @@ package zookeeper
 import (
 	"github.com/go-zookeeper/zk"
 	"github.com/imroc/zk2etcd/pkg/log"
+	"github.com/imroc/zk2etcd/pkg/util/try"
+	"github.com/prometheus/client_golang/prometheus"
+	"sync"
 	"time"
 )
 
+var (
+	ZKOp = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zk2etcd_zk_op_total",
+			Help: "Number of the zk operation",
+		},
+		[]string{"op", "status"},
+	)
+	ZKOpDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "zk2etcd_zk_op_duration_seconds",
+			Help:    "Duration in seconds of zk operation",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"op", "status"},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(ZKOp)
+	prometheus.MustRegister(ZKOpDuration)
+}
+
 type Client struct {
+	connectCount int
+	lock         sync.Mutex
 	*log.Logger
 	servers   []string
 	conn      *zk.Conn
@@ -32,6 +60,7 @@ func (c *Client) EnsureExists(key string) {
 				"error", err,
 				"key", key,
 			)
+			continue
 		}
 		if !exists {
 			c.Warnw("zookeeper path doesn't exist, wait until it's created",
@@ -56,22 +85,46 @@ func (c *Client) getWatchConn() *zk.Conn {
 	return c.watchConn
 }
 
-func (c *Client) Exists(key string) (exist bool) {
-	defer func() {
-		c.Debugw("check zk exsit",
-			"key", key,
-			"exist", exist,
-		)
-	}()
-	var err error
-	exist, _, err = c.getConn().Exists(key)
-	for err != nil {
-		c.Errorw("zk check exists failed",
-			"key", key,
-			"error", err,
-		)
-		time.Sleep(time.Second)
+func (c *Client) ReConnect() {
+	count := c.connectCount
+	c.lock.Lock() // TODO: 优化 edge case
+	defer c.lock.Unlock()
+	if c.connectCount != count {
+		return
 	}
+	c.watchConn = c.connectUntilSuccess()
+	c.connectCount++
+}
+
+func (c *Client) exists(key string) (exist bool, err error) {
+	c.Debugw("check zk exsit",
+		"key", key,
+	)
+	before := time.Now()
+	exist, _, err = c.getConn().Exists(key)
+	cost := time.Since(before)
+	status := "success"
+	if err != nil {
+		status = err.Error()
+	}
+	ZKOp.WithLabelValues("exists", status).Inc()
+	ZKOpDuration.WithLabelValues("exists", status).Observe(float64(time.Duration(cost) / time.Second))
+	return
+}
+
+func (c *Client) do(fn func() bool) {
+	try.Do(fn, 3, time.Second)
+}
+
+func (c *Client) Exists(key string) (exist bool) {
+	c.do(func() bool {
+		var err error
+		exist, err = c.exists(key)
+		if err != nil {
+			return false
+		}
+		return true
+	})
 	return
 }
 
@@ -87,84 +140,135 @@ func (c *Client) Create(key string) {
 	}
 }
 
-func (c *Client) Get(key string) (value string, exist bool) {
-	defer func() {
-		c.Debugw("zk get",
-			"key", key,
-			"value", value,
-			"exist", exist,
-		)
-	}()
+func (c *Client) get(key string) (value string, exist bool, err error) {
+	c.Debugw("zk get",
+		"key", key,
+	)
+	before := time.Now()
 	v, _, err := c.getConn().Get(key)
-	for err != nil {
+	cost := time.Since(before)
+	status := "success"
+	exist = true
+	if err != nil {
 		if err == zk.ErrNoNode {
-			return "", false
+			err = nil
+			exist = false
+			c.Warnw("zk get but not exist",
+				"key", key,
+			)
+		} else {
+			status = err.Error()
+			c.Errorw("zk get failed",
+				"key", key,
+				"error", err,
+			)
 		}
-		c.Errorw("zk get failed",
-			"key", key,
-			"error", err,
-		)
-		time.Sleep(time.Second)
 	}
 	value = string(v)
-	exist = true
+	ZKOp.WithLabelValues("get", status).Inc()
+	ZKOpDuration.WithLabelValues("get", status).Observe(float64(time.Duration(cost) / time.Second))
+	return
+}
+
+func (c *Client) Get(key string) (value string, exist bool) {
+	c.do(func() bool {
+		var err error
+		value, exist, err = c.get(key)
+		if err != nil {
+			return false
+		}
+		return true
+	})
 	return
 }
 
 // Delete 暂时不用
-func (c *Client) Delete(key string) {
-	c.Debugw("zk delete",
+//func (c *Client) Delete(key string) {
+//	c.Debugw("zk delete",
+//		"key", key,
+//	)
+//	_, s, err := c.getConn().Get(key)
+//	for err != nil {
+//		c.Errorw("zk delete failed",
+//			"key", key,
+//			"error", err,
+//		)
+//		metrics.Interrupt.WithLabelValues(err.Error()).Inc()
+//		time.Sleep(time.Second)
+//	}
+//	// TODO: 提升健壮性，处理删除冲突，进行重试
+//	err = c.getConn().Delete(key, s.Version)
+//	for err != nil {
+//		c.Errorw("zk delete failed",
+//			"key", key,
+//			"error", err,
+//		)
+//		metrics.Interrupt.WithLabelValues(err.Error()).Inc()
+//		time.Sleep(time.Second)
+//	}
+//}
+
+func (c *Client) list(key string) (children []string, err error) {
+	c.Debugw("zk list",
 		"key", key,
 	)
-	_, s, err := c.getConn().Get(key)
-	for err != nil {
-		c.Errorw("zk delete failed",
-			"key", key,
-			"error", err,
-		)
-		time.Sleep(time.Second)
-	}
-	// TODO: 提升健壮性，处理删除冲突，进行重试
-	err = c.getConn().Delete(key, s.Version)
-	for err != nil {
-		c.Errorw("zk delete failed",
-			"key", key,
-			"error", err,
-		)
-		time.Sleep(time.Second)
-	}
-}
-
-func (c *Client) List(key string) []string {
-	children, _, err := c.getConn().Children(key)
-	if err != nil {
+	before := time.Now()
+	children, _, err = c.getConn().Children(key)
+	cost := time.Since(before)
+	status := "success"
+	if err != nil && err != zk.ErrNoNode {
 		c.Errorw("zk list failed",
 			"key", key,
 			"error", err,
 		)
-		return nil
+		status = err.Error()
 	}
-	c.Debugw("zk list",
-		"key", key,
-		"children", children,
-	)
-	return children
+	ZKOp.WithLabelValues("list", status).Inc()
+	ZKOpDuration.WithLabelValues("list", status).Observe(float64(time.Duration(cost) / time.Second))
+	return
 }
 
-func (c *Client) ListW(key string) (children []string, ch <-chan zk.Event) {
-	children, _, ch, err := c.getWatchConn().ChildrenW(key)
-	for err != nil && err != zk.ErrNoNode {
+func (c *Client) List(key string) (children []string) {
+	c.do(func() bool {
+		var err error
+		children, err = c.list(key)
+		if err != nil {
+			return false
+		}
+		return true
+	})
+	return
+}
+
+func (c *Client) listW(key string) (children []string, ch <-chan zk.Event, err error) {
+	c.Debugw("zk list watch",
+		"key", key,
+	)
+	before := time.Now()
+	children, _, ch, err = c.getWatchConn().ChildrenW(key)
+	cost := time.Since(before)
+	status := "success"
+	if err != nil && err != zk.ErrNoNode {
 		c.Errorw("failed to list watch zookeeper",
 			"key", key,
 			"error", err,
 		)
-		time.Sleep(1 * time.Second)
-		children, _, ch, err = c.getWatchConn().ChildrenW(key)
+		status = err.Error()
 	}
-	c.Debugw("zk list watch",
-		"key", key,
-		"children", children,
-	)
+	ZKOp.WithLabelValues("list watch", status).Inc()
+	ZKOpDuration.WithLabelValues("list watch", status).Observe(float64(time.Duration(cost) / time.Second))
+	return
+}
+
+func (c *Client) ListW(key string) (children []string, ch <-chan zk.Event) {
+	c.do(func() bool {
+		var err error
+		children, ch, err = c.listW(key)
+		if err != nil {
+			return false
+		}
+		return true
+	})
 	return
 }
 
