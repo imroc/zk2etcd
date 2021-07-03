@@ -18,7 +18,6 @@ import (
 type Syncer struct {
 	zkPrefix         []string
 	zkExcludePrefix  []string
-	etcd             *etcd.Client
 	m                sync.Map
 	concurrency      uint
 	keysToSync       chan string
@@ -29,11 +28,10 @@ type Syncer struct {
 	stop             <-chan struct{}
 }
 
-func New(zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, concurrency uint, fullSyncInterval time.Duration, stop <-chan struct{}) *Syncer {
+func New(zkPrefix, zkExcludePrefix []string, concurrency uint, fullSyncInterval time.Duration, stop <-chan struct{}) *Syncer {
 	return &Syncer{
 		zkPrefix:         zkPrefix,
 		zkExcludePrefix:  zkExcludePrefix,
-		etcd:             etcd,
 		concurrency:      concurrency,
 		keysToSync:       make(chan string, concurrency),
 		fullSyncInterval: fullSyncInterval,
@@ -69,7 +67,7 @@ func (s *Syncer) FullSync() {
 	log.Info("start full sync")
 	before := time.Now()
 
-	d := diff.New(s.zkPrefix, s.zkExcludePrefix, s.etcd, s.concurrency)
+	d := diff.New(s.zkPrefix, s.zkExcludePrefix, s.concurrency)
 
 	log.Info("start full sync diff")
 	d.Run()
@@ -92,7 +90,7 @@ func (s *Syncer) ensureClients() {
 	}
 	log.Info("check zk success")
 	log.Debugw("check etcd")
-	s.etcd.Get("/")
+	etcd.Get("/")
 	log.Info("check etcd success")
 }
 
@@ -163,7 +161,7 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 	)
 	switch event.Type {
 	case zk.EventNodeDeleted:
-		s.etcd.DeleteWithPrefix(event.Path)
+		etcd.DeleteWithPrefix(event.Path)
 		s.removeWatch(event.Path)
 		return false
 	case zk.EventNodeChildrenChanged:
@@ -221,7 +219,7 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 				}
 				children, ch = zookeeper.ListW(key)
 				if ch == nil {
-					log.Warnw("continue list watch children but key not exist any more",
+					log.Debugw("continue list watch children but key not exist any more",
 						"key", key,
 					)
 					s.removeWatch(event.Path)
@@ -288,27 +286,27 @@ func (s *Syncer) syncKey(key string) {
 	)
 	defer s.keyCountSynced.Inc()
 	zkValue, existInZK := zookeeper.Get(key)
-	etcdValue, existInEtcd := s.etcd.Get(key)
+	etcdValue, existInEtcd := etcd.Get(key)
 	switch {
 	case existInZK && !existInEtcd: // etcd 中缺失，补齐
 		log.Debugw("key not exist in etcd, put in etcd",
 			"key", key,
 			"value", zkValue,
 		)
-		s.etcd.Put(key, zkValue)
+		etcd.Put(key, zkValue)
 		s.syncWatchRecursive(key, s.stop) // 可能是新增的，确保 watch 下
 	case !existInZK && existInEtcd: // etcd 中多出 key，删除
 		log.Debugw("key not exist in zk, remove in etcd",
 			"key", key,
 		)
-		s.etcd.DeleteWithPrefix(key)
+		etcd.DeleteWithPrefix(key)
 	case existInZK && existInEtcd && (zkValue != etcdValue): // key 都存在，但 value 不同，纠正 etcd 中的 value
 		log.Debugw("value differs",
 			"key", key,
 			"zkValue", zkValue,
 			"etcdValue", etcdValue,
 		)
-		s.etcd.Put(key, zkValue)
+		etcd.Put(key, zkValue)
 	default:
 		log.Debugw("sync ignore",
 			"key", key,
@@ -321,7 +319,7 @@ func (s *Syncer) syncKey(key string) {
 }
 
 func (s *Syncer) syncChildren(key string) {
-	log.Debugw("sync children",
+	log.Infow("sync children",
 		"key", key,
 	)
 	children := zookeeper.List(key)

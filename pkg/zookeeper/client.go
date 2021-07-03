@@ -164,10 +164,14 @@ func (c *Client) Get(key string) (value string, exist bool) {
 		)
 		v, _, err := conn.Get(key)
 		if err != nil {
-			log.Warnw("zk get failed",
-				"key", key,
-				"error", err,
-			)
+			if err == zk.ErrNoNode {
+				ok = true
+			} else {
+				log.Warnw("zk get failed",
+					"key", key,
+					"error", err,
+				)
+			}
 		} else {
 			exist = true
 			ok = true
@@ -215,10 +219,14 @@ func (c *Client) List(key string) (children []string) {
 		)
 		children, _, err = conn.Children(key)
 		if err != nil {
-			log.Warnw("zk list failed",
-				"key", key,
-				"error", err,
-			)
+			if err == zk.ErrNoNode {
+				ok = true
+			} else {
+				log.Warnw("zk list failed",
+					"key", key,
+					"error", err,
+				)
+			}
 		} else {
 			ok = true
 		}
@@ -238,10 +246,14 @@ func (c *Client) ListW(key string) (children []string, ch <-chan zk.Event) {
 		)
 		children, _, ch, err = conn.ChildrenW(key)
 		if err != nil {
-			log.Errorw("zk list watch failed",
-				"key", key,
-				"error", err,
-			)
+			if err == zk.ErrNoNode {
+				ok = true
+			} else {
+				log.Warnw("zk list watch failed",
+					"key", key,
+					"error", err,
+				)
+			}
 		} else {
 			ok = true
 		}

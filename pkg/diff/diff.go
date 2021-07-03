@@ -15,7 +15,6 @@ import (
 type Diff struct {
 	zkPrefix        []string
 	zkExcludePrefix []string
-	etcd            *etcd.Client
 	concurrency     uint
 	listWorkers     uint
 	zkKeyCount      atomic.Int32
@@ -30,11 +29,10 @@ type Diff struct {
 	stopChan        chan struct{}
 }
 
-func New(zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, concurrency uint) *Diff {
+func New(zkPrefix, zkExcludePrefix []string, concurrency uint) *Diff {
 	return &Diff{
 		zkPrefix:        zkPrefix,
 		zkExcludePrefix: zkExcludePrefix,
-		etcd:            etcd,
 		concurrency:     concurrency,
 		etcdKeys:        map[string]bool{},
 		keys:            make(chan string, concurrency*2),
@@ -174,7 +172,7 @@ func (d *Diff) conDo(cocurrent int, keys []string, doFunc func(string)) {
 func (d *Diff) Fix() {
 	// 删除 etcd 多余的 key
 	d.conDo(int(d.concurrency), d.extra, func(key string) {
-		d.etcd.Delete(key, false)
+		etcd.Delete(key, false)
 	})
 
 	// 补齐 etcd 缺失的 key
@@ -186,7 +184,7 @@ func (d *Diff) Fix() {
 			)
 			return
 		}
-		d.etcd.Put(key, value)
+		etcd.Put(key, value)
 	})
 }
 
@@ -216,7 +214,7 @@ func (d *Diff) shouldExclude(key string) bool {
 func (d *Diff) etcdGetAll(key string, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
-	keys := d.etcd.ListAllKeys(key)
+	keys := etcd.ListAllKeys(key)
 	for _, key := range keys {
 		if d.shouldExclude(key) {
 			continue

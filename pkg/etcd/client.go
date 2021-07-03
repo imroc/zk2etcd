@@ -76,7 +76,7 @@ func (c *Client) init() error {
 
 func (c *Client) put(key, value string) error {
 	before := time.Now()
-	log.Debugw("etcd put",
+	log.Infow("etcd put",
 		"key", key,
 		"value", value,
 	)
@@ -99,6 +99,10 @@ func (c *Client) do(fn func() bool) {
 	try.Do(fn, 3, time.Second)
 }
 
+func Put(key, value string) {
+	client.Put(key, value)
+}
+
 func (c *Client) Put(key, value string) {
 	c.do(func() bool {
 		err := c.put(key, value)
@@ -110,7 +114,7 @@ func (c *Client) Put(key, value string) {
 }
 
 func (c *Client) delete(key string, prefix bool) error {
-	log.Debugw("etcd delete key",
+	log.Infow("etcd delete key",
 		"key", key,
 		"withPrefix", prefix,
 	)
@@ -134,6 +138,10 @@ func (c *Client) delete(key string, prefix bool) error {
 	return err
 }
 
+func Delete(key string, prefix bool) {
+	client.Delete(key, prefix)
+}
+
 func (c *Client) Delete(key string, prefix bool) {
 	c.do(func() bool {
 		err := c.delete(key, prefix)
@@ -142,6 +150,10 @@ func (c *Client) Delete(key string, prefix bool) {
 		}
 		return true
 	})
+}
+
+func DeleteWithPrefix(key string) {
+	client.DeleteWithPrefix(key)
 }
 
 func (c *Client) DeleteWithPrefix(key string) {
@@ -177,6 +189,10 @@ func (c *Client) get(key string) (value string, ok bool, err error) {
 		ok = true
 	}
 	return
+}
+
+func Get(key string) (value string, ok bool) {
+	return client.Get(key)
 }
 
 func (c *Client) Get(key string) (value string, ok bool) {
@@ -224,6 +240,10 @@ func (c *Client) list(key string) ([]string, error) {
 	return keys, err
 }
 
+func ListAllKeys(key string) (keys []string) {
+	return client.ListAllKeys(key)
+}
+
 func (c *Client) ListAllKeys(key string) (keys []string) {
 	c.do(func() bool {
 		var err error
@@ -233,5 +253,9 @@ func (c *Client) ListAllKeys(key string) (keys []string) {
 		}
 		return true
 	})
+	log.Infow("etcd list keys",
+		"prefix", key,
+		"count", len(keys),
+	)
 	return
 }
