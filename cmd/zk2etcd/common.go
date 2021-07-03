@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"github.com/imroc/zk2etcd/pkg/etcd"
 	"github.com/imroc/zk2etcd/pkg/log"
-	"github.com/imroc/zk2etcd/pkg/zookeeper"
 	flag "github.com/spf13/pflag"
 	"io/ioutil"
 	"strings"
@@ -33,14 +32,12 @@ func (c *Common) AddFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.logLevel, "log-level", "info", "log output level，possible values: 'debug', 'info', 'warn', 'error', 'panic', 'fatal'")
 }
 
-func (c *Common) GetAll() (zkClient *zookeeper.Client, etcdClient *etcd.Client, zkPrefixes, zkExcludePrefixes []string) {
+func (c *Common) GetAll() (etcdClient *etcd.Client, zkPrefixes, zkExcludePrefixes []string) {
 	zkPrefixes = strings.Split(c.zookeeperPrefix, ",")
 	if len(zkPrefixes) == 0 {
 		zkPrefixes = append(zkPrefixes, "/")
 	}
 	zkExcludePrefixes = strings.Split(c.zookeeperExcludePrefix, ",")
-
-	zkClient = zookeeper.NewClient(strings.Split(c.zookeeperServers, ","))
 
 	var tlsConfig *tls.Config
 	var etcdCert []tls.Certificate

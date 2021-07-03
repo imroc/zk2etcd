@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/imroc/zk2etcd/pkg/log"
 	"github.com/imroc/zk2etcd/pkg/sync"
+	"github.com/imroc/zk2etcd/pkg/zookeeper"
 	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
@@ -15,7 +16,8 @@ func newSyncCmd(args []string) *cobra.Command {
 	stopChan := make(chan struct{}, 1)
 	var concurrent uint
 	var fullSyncInterval time.Duration
-	var logOption log.Option
+	var logOption log.Options
+	var zkOption zookeeper.Options
 
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -25,14 +27,15 @@ func newSyncCmd(args []string) *cobra.Command {
 		Long:              `sync data from zookeeper to etcd`,
 		PreRun: func(cmd *cobra.Command, args []string) {
 			log.Init(&logOption) // 初始化 logging
+			zookeeper.Init(&zkOption)
 
 			// TODO: 初始化 zk 和 etcd
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 
-			zkClient, etcdClient, zkPrefixes, zkExcludePrefixes := common.GetAll()
+			etcdClient, zkPrefixes, zkExcludePrefixes := common.GetAll()
 
-			s := sync.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, concurrent, fullSyncInterval, stopChan)
+			s := sync.New(zkPrefixes, zkExcludePrefixes, etcdClient, concurrent, fullSyncInterval, stopChan)
 			go s.Run()
 
 			// TODO: 实现真正优雅停止
@@ -46,6 +49,8 @@ func newSyncCmd(args []string) *cobra.Command {
 	cmd.SetArgs(args)
 	common.AddFlags(cmd.Flags())
 	logOption.AddFlags(cmd.Flags())
+	zkOption.AddFlags(cmd.Flags())
+
 	cmd.Flags().UintVar(&concurrent, "concurrent", 50, "the concurreny of syncing worker")
 	cmd.Flags().DurationVar(&fullSyncInterval, "fullsync-interval", 5*time.Minute, "the interval of full sync, set to 0s to disable it")
 	return cmd

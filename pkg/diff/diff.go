@@ -13,7 +13,6 @@ import (
 )
 
 type Diff struct {
-	zk              *zookeeper.Client
 	zkPrefix        []string
 	zkExcludePrefix []string
 	etcd            *etcd.Client
@@ -31,9 +30,8 @@ type Diff struct {
 	stopChan        chan struct{}
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, concurrency uint) *Diff {
+func New(zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, concurrency uint) *Diff {
 	return &Diff{
-		zk:              zkClient,
 		zkPrefix:        zkPrefix,
 		zkExcludePrefix: zkExcludePrefix,
 		etcd:            etcd,
@@ -69,7 +67,7 @@ func (d *Diff) starDiffWorkers() {
 }
 
 func (d *Diff) handleChildren(key string) {
-	children := d.zk.List(key)
+	children := zookeeper.List(key)
 	for _, child := range children {
 		newKey := filepath.Join(key, child)
 		d.handleKeyRecursive(newKey)
@@ -81,7 +79,7 @@ func (d *Diff) handleKeyRecursive(key string) {
 	defer d.workerWg.Done()
 
 	d.keys <- key
-	children := d.zk.List(key)
+	children := zookeeper.List(key)
 	for _, child := range children {
 		newKey := filepath.Join(key, child)
 		d.handleKeyRecursive(newKey)
@@ -118,7 +116,7 @@ func (d *Diff) Run() {
 	)
 
 	for _, prefix := range d.zkPrefix {
-		if !d.zk.Exists(prefix) {
+		if !zookeeper.Exists(prefix) {
 			log.Warnw("prefix key not exsits",
 				"key", prefix,
 			)
@@ -181,7 +179,7 @@ func (d *Diff) Fix() {
 
 	// 补齐 etcd 缺失的 key
 	d.conDo(int(d.concurrency), d.missed, func(key string) {
-		value, ok := d.zk.Get(key)
+		value, ok := zookeeper.Get(key)
 		if !ok {
 			log.Errorw("try add etcd key but not exist in zk",
 				"key", key,

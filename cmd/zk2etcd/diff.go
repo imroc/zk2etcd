@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/imroc/zk2etcd/pkg/diff"
 	"github.com/imroc/zk2etcd/pkg/log"
+	"github.com/imroc/zk2etcd/pkg/zookeeper"
 	"github.com/spf13/cobra"
 	"time"
 )
@@ -12,7 +13,8 @@ func newDiffCmd(args []string) *cobra.Command {
 	var common Common
 	var concurrent uint
 	var fix bool
-	var logOption log.Option
+	var logOption log.Options
+	var zkOption zookeeper.Options
 
 	cmd := &cobra.Command{
 		Use:   "diff",
@@ -21,12 +23,13 @@ func newDiffCmd(args []string) *cobra.Command {
 		DisableAutoGenTag: true,
 		PreRun: func(cmd *cobra.Command, args []string) {
 			log.Init(&logOption) // 初始化 logging
+			zookeeper.Init(&zkOption)
 
 			// TODO: 初始化 zk 和 etcd
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			zkClient, etcdClient, zkPrefixes, zkExcludePrefixes := common.GetAll()
-			d := diff.New(zkClient, zkPrefixes, zkExcludePrefixes, etcdClient, concurrent)
+			etcdClient, zkPrefixes, zkExcludePrefixes := common.GetAll()
+			d := diff.New(zkPrefixes, zkExcludePrefixes, etcdClient, concurrent)
 			before := time.Now()
 			d.Run()
 			d.PrintSummary()
@@ -41,6 +44,8 @@ func newDiffCmd(args []string) *cobra.Command {
 	cmd.SetArgs(args)
 	common.AddFlags(cmd.Flags())
 	logOption.AddFlags(cmd.Flags())
+	zkOption.AddFlags(cmd.Flags())
+
 	cmd.Flags().UintVar(&concurrent, "concurrent", 50, "the concurreny of syncing worker")
 	cmd.Flags().BoolVar(&fix, "fix", false, "set to true will fix the data diff between zk and etcd")
 	return cmd

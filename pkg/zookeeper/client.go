@@ -4,76 +4,61 @@ import (
 	"github.com/go-zookeeper/zk"
 	"github.com/imroc/zk2etcd/pkg/log"
 	"github.com/imroc/zk2etcd/pkg/util/try"
-	"github.com/prometheus/client_golang/prometheus"
 	"sync"
 	"time"
 )
 
-var (
-	ZKOp = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "zk2etcd_zk_op_total",
-			Help: "Number of the zk operation",
-		},
-		[]string{"op", "status"},
-	)
-	ZKOpDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "zk2etcd_zk_op_duration_seconds",
-			Help:    "Duration in seconds of zk operation",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"op", "status"},
-	)
-)
-
-func init() {
-	prometheus.MustRegister(ZKOp)
-	prometheus.MustRegister(ZKOpDuration)
-}
-
 type Client struct {
+	connPool     *sync.Pool
 	connectCount int
 	lock         sync.Mutex
-	servers   []string
-	conn      *zk.Conn
-	watchConn *zk.Conn
+	servers      []string
+	conn         *zk.Conn
+	watchConn    *zk.Conn
 }
 
 func NewClient(servers []string) *Client {
 	client := &Client{
 		servers: servers,
 	}
+	client.connPool = &sync.Pool{
+		New: func() interface{} {
+			return client.connectUntilSuccess()
+		},
+	}
 	return client
 }
 
+func EnsureExists(key string) {
+	client.EnsureExists(key)
+}
+
 func (c *Client) EnsureExists(key string) {
-	// check path exsitence
-	exists := false
-	for !exists {
-		var err error
-		exists, _, err = c.getConn().Exists(key)
+	c.dozkn("exists", func(conn *zk.Conn) (ok bool, err error) {
+		log.Debugw("zk check exists",
+			"key", key,
+		)
+		exist, _, err := conn.Exists(key)
 		if err != nil {
-			log.Errorw("failed to check path existence",
-				"error", err,
+			log.Warnw("zk check exists failed",
 				"key", key,
-			)
-			continue
-		}
-		if !exists {
-			log.Warnw("zookeeper path doesn't exist, wait until it's created",
-				"key", key,
+				"error", err.Error(),
 			)
 		}
-		time.Sleep(time.Second * 2)
-	}
+		if exist {
+			ok = true // 确保 key 存在才结束循环
+		}
+		return
+	}, -1)
+	return
 }
 
 func (c *Client) getConn() *zk.Conn {
-	if c.conn == nil {
-		c.conn = c.connectUntilSuccess()
-	}
-	return c.conn
+	return c.connPool.Get().(*zk.Conn)
+}
+
+func (c *Client) putConn(conn *zk.Conn) {
+	c.connPool.Put(conn)
 }
 
 func (c *Client) getWatchConn() *zk.Conn {
@@ -81,6 +66,10 @@ func (c *Client) getWatchConn() *zk.Conn {
 		c.watchConn = c.connectUntilSuccess()
 	}
 	return c.watchConn
+}
+
+func ReConnect() {
+	client.ReConnect()
 }
 
 func (c *Client) ReConnect() {
@@ -94,88 +83,97 @@ func (c *Client) ReConnect() {
 	c.connectCount++
 }
 
-func (c *Client) exists(key string) (exist bool, err error) {
-	log.Debugw("check zk exsit",
-		"key", key,
-	)
-	before := time.Now()
-	exist, _, err = c.getConn().Exists(key)
-	cost := time.Since(before)
-	status := "success"
-	if err != nil {
-		status = err.Error()
-	}
-	ZKOp.WithLabelValues("exists", status).Inc()
-	ZKOpDuration.WithLabelValues("exists", status).Observe(float64(time.Duration(cost) / time.Second))
-	return
+func (c *Client) dozkn(op string, fn func(conn *zk.Conn) (bool, error), n int) {
+	try.Do(func() bool {
+		conn := c.getConn()
+		defer c.putConn(conn)
+		before := time.Now()
+		ok, err := fn(conn)
+		cost := time.Since(before)
+		status := "success"
+		if err != nil {
+			status = err.Error()
+		}
+		ZKOp.WithLabelValues(op, status).Inc()
+		ZKOpDuration.WithLabelValues(op, status).Observe(float64(time.Duration(cost) / time.Second))
+		return ok
+	}, n, time.Second)
 }
 
-func (c *Client) do(fn func() bool) {
-	try.Do(fn, 3, time.Second)
+// 统一封装 zk 操作，抽离连接池管理+metrics逻辑
+func (c *Client) dozk(op string, fn func(conn *zk.Conn) (bool, error)) {
+	c.dozkn(op, fn, 3)
+}
+
+func Exists(key string) bool {
+	return client.Exists(key)
 }
 
 func (c *Client) Exists(key string) (exist bool) {
-	c.do(func() bool {
-		var err error
-		exist, err = c.exists(key)
+	c.dozk("exists", func(conn *zk.Conn) (ok bool, err error) {
+		log.Debugw("zk check exists",
+			"key", key,
+		)
+		exist, _, err = conn.Exists(key)
 		if err != nil {
-			return false
+			log.Warnw("zk check exists failed",
+				"key", key,
+				"error", err.Error(),
+			)
+		} else {
+			ok = true // 只要没报错就不继续
 		}
-		return true
+		return
 	})
 	return
+
+}
+
+func Create(key string) {
+	client.Create(key)
 }
 
 func (c *Client) Create(key string) {
-	flag := int32(0)
-	acl := zk.WorldACL(zk.PermAll)
-	_, err := c.getConn().Create(key, []byte("douyudouyu"), flag, acl)
-	if err != nil {
-		log.Errorw("zk create key failed",
-			"error", err,
+	c.dozk("create", func(conn *zk.Conn) (ok bool, err error) {
+		log.Debugw("zk create",
 			"key", key,
 		)
-	}
-}
-
-func (c *Client) get(key string) (value string, exist bool, err error) {
-	log.Debugw("zk get",
-		"key", key,
-	)
-	before := time.Now()
-	v, _, err := c.getConn().Get(key)
-	cost := time.Since(before)
-	status := "success"
-	exist = true
-	if err != nil {
-		if err == zk.ErrNoNode {
-			err = nil
-			exist = false
-			log.Warnw("zk get but not exist",
-				"key", key,
-			)
-		} else {
-			status = err.Error()
-			log.Errorw("zk get failed",
+		flag := int32(0)
+		acl := zk.WorldACL(zk.PermAll)
+		_, err = conn.Create(key, []byte("douyudouyu"), flag, acl)
+		if err != nil {
+			log.Warnw("zk create key failed",
 				"key", key,
 				"error", err,
 			)
+		} else {
+			ok = true
 		}
-	}
-	value = string(v)
-	ZKOp.WithLabelValues("get", status).Inc()
-	ZKOpDuration.WithLabelValues("get", status).Observe(float64(time.Duration(cost) / time.Second))
-	return
+		return
+	})
+}
+
+func Get(key string) (value string, exist bool) {
+	return client.Get(key)
 }
 
 func (c *Client) Get(key string) (value string, exist bool) {
-	c.do(func() bool {
-		var err error
-		value, exist, err = c.get(key)
+	c.dozk("get", func(conn *zk.Conn) (ok bool, err error) {
+		log.Debugw("zk get",
+			"key", key,
+		)
+		v, _, err := conn.Get(key)
 		if err != nil {
-			return false
+			log.Warnw("zk get failed",
+				"key", key,
+				"error", err,
+			)
+		} else {
+			exist = true
+			ok = true
+			value = string(v)
 		}
-		return true
+		return
 	})
 	return
 }
@@ -206,66 +204,48 @@ func (c *Client) Get(key string) (value string, exist bool) {
 //	}
 //}
 
-func (c *Client) list(key string) (children []string, err error) {
-	log.Debugw("zk list",
-		"key", key,
-	)
-	before := time.Now()
-	children, _, err = c.getConn().Children(key)
-	cost := time.Since(before)
-	status := "success"
-	if err != nil && err != zk.ErrNoNode {
-		log.Errorw("zk list failed",
-			"key", key,
-			"error", err,
-		)
-		status = err.Error()
-	}
-	ZKOp.WithLabelValues("list", status).Inc()
-	ZKOpDuration.WithLabelValues("list", status).Observe(float64(time.Duration(cost) / time.Second))
-	return
+func List(key string) (children []string) {
+	return client.List(key)
 }
 
 func (c *Client) List(key string) (children []string) {
-	c.do(func() bool {
-		var err error
-		children, err = c.list(key)
+	c.dozk("list", func(conn *zk.Conn) (ok bool, err error) {
+		log.Debugw("zk list",
+			"key", key,
+		)
+		children, _, err = conn.Children(key)
 		if err != nil {
-			return false
+			log.Warnw("zk list failed",
+				"key", key,
+				"error", err,
+			)
+		} else {
+			ok = true
 		}
-		return true
+		return
 	})
 	return
 }
 
-func (c *Client) listW(key string) (children []string, ch <-chan zk.Event, err error) {
-	log.Debugw("zk list watch",
-		"key", key,
-	)
-	before := time.Now()
-	children, _, ch, err = c.getWatchConn().ChildrenW(key)
-	cost := time.Since(before)
-	status := "success"
-	if err != nil && err != zk.ErrNoNode {
-		log.Errorw("failed to list watch zookeeper",
-			"key", key,
-			"error", err,
-		)
-		status = err.Error()
-	}
-	ZKOp.WithLabelValues("list watch", status).Inc()
-	ZKOpDuration.WithLabelValues("list watch", status).Observe(float64(time.Duration(cost) / time.Second))
-	return
+func ListW(key string) (children []string, ch <-chan zk.Event) {
+	return client.ListW(key)
 }
 
 func (c *Client) ListW(key string) (children []string, ch <-chan zk.Event) {
-	c.do(func() bool {
-		var err error
-		children, ch, err = c.listW(key)
+	c.dozk("listwatch", func(conn *zk.Conn) (ok bool, err error) {
+		log.Debugw("zk list watch",
+			"key", key,
+		)
+		children, _, ch, err = conn.ChildrenW(key)
 		if err != nil {
-			return false
+			log.Errorw("zk list watch failed",
+				"key", key,
+				"error", err,
+			)
+		} else {
+			ok = true
 		}
-		return true
+		return
 	})
 	return
 }

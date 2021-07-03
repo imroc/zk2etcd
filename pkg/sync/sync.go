@@ -16,7 +16,6 @@ import (
 )
 
 type Syncer struct {
-	zk               *zookeeper.Client
 	zkPrefix         []string
 	zkExcludePrefix  []string
 	etcd             *etcd.Client
@@ -30,9 +29,8 @@ type Syncer struct {
 	stop             <-chan struct{}
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, concurrency uint, fullSyncInterval time.Duration, stop <-chan struct{}) *Syncer {
+func New(zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, concurrency uint, fullSyncInterval time.Duration, stop <-chan struct{}) *Syncer {
 	return &Syncer{
-		zk:               zkClient,
 		zkPrefix:         zkPrefix,
 		zkExcludePrefix:  zkExcludePrefix,
 		etcd:             etcd,
@@ -71,7 +69,7 @@ func (s *Syncer) FullSync() {
 	log.Info("start full sync")
 	before := time.Now()
 
-	d := diff.New(s.zk, s.zkPrefix, s.zkExcludePrefix, s.etcd, s.concurrency)
+	d := diff.New(s.zkPrefix, s.zkExcludePrefix, s.etcd, s.concurrency)
 
 	log.Info("start full sync diff")
 	d.Run()
@@ -90,7 +88,7 @@ func (s *Syncer) FullSync() {
 func (s *Syncer) ensureClients() {
 	log.Debugw("check zk")
 	for _, prefix := range s.zkPrefix {
-		s.zk.EnsureExists(prefix)
+		zookeeper.EnsureExists(prefix)
 	}
 	log.Info("check zk success")
 	log.Debugw("check etcd")
@@ -178,7 +176,7 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 			"error", event.Err,
 			"path", event.Path,
 		)
-		s.zk.ReConnect()
+		zookeeper.ReConnect()
 		return true
 	default:
 		log.Warnw("unknown event",
@@ -204,7 +202,7 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 		"key", key,
 	)
 
-	children, ch := s.zk.ListW(key)
+	children, ch := zookeeper.ListW(key)
 
 	if ch == nil {
 		log.Warnw("key not exist",
@@ -221,7 +219,7 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 				if !shouldContinue {
 					return
 				}
-				children, ch = s.zk.ListW(key)
+				children, ch = zookeeper.ListW(key)
 				if ch == nil {
 					log.Warnw("continue list watch children but key not exist any more",
 						"key", key,
@@ -276,7 +274,7 @@ func (s *Syncer) syncKeyRecursive(key string) {
 	}
 
 	s.keysToSync <- key
-	children := s.zk.List(key)
+	children := zookeeper.List(key)
 
 	for _, child := range children {
 		fullPath := filepath.Join(key, child)
@@ -289,7 +287,7 @@ func (s *Syncer) syncKey(key string) {
 		"key", key,
 	)
 	defer s.keyCountSynced.Inc()
-	zkValue, existInZK := s.zk.Get(key)
+	zkValue, existInZK := zookeeper.Get(key)
 	etcdValue, existInEtcd := s.etcd.Get(key)
 	switch {
 	case existInZK && !existInEtcd: // etcd 中缺失，补齐
@@ -326,7 +324,7 @@ func (s *Syncer) syncChildren(key string) {
 	log.Debugw("sync children",
 		"key", key,
 	)
-	children := s.zk.List(key)
+	children := zookeeper.List(key)
 	for _, child := range children {
 		fullPath := filepath.Join(key, child)
 		s.syncKey(fullPath)

@@ -28,7 +28,7 @@ func newGenzkCmd(args []string) *cobra.Command {
 		DisableAutoGenTag: true,
 
 		PreRun: func(cmd *cobra.Command, args []string) {
-			opt := &log.Option{LogLevel: "debug"}
+			opt := &log.Options{LogLevel: "debug"}
 			log.Init(opt)
 		},
 
