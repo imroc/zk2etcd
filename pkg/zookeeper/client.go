@@ -35,15 +35,13 @@ func init() {
 type Client struct {
 	connectCount int
 	lock         sync.Mutex
-	*log.Logger
 	servers   []string
 	conn      *zk.Conn
 	watchConn *zk.Conn
 }
 
-func NewClient(logger *log.Logger, servers []string) *Client {
+func NewClient(servers []string) *Client {
 	client := &Client{
-		Logger:  logger,
 		servers: servers,
 	}
 	return client
@@ -56,14 +54,14 @@ func (c *Client) EnsureExists(key string) {
 		var err error
 		exists, _, err = c.getConn().Exists(key)
 		if err != nil {
-			c.Errorw("failed to check path existence",
+			log.Errorw("failed to check path existence",
 				"error", err,
 				"key", key,
 			)
 			continue
 		}
 		if !exists {
-			c.Warnw("zookeeper path doesn't exist, wait until it's created",
+			log.Warnw("zookeeper path doesn't exist, wait until it's created",
 				"key", key,
 			)
 		}
@@ -97,7 +95,7 @@ func (c *Client) ReConnect() {
 }
 
 func (c *Client) exists(key string) (exist bool, err error) {
-	c.Debugw("check zk exsit",
+	log.Debugw("check zk exsit",
 		"key", key,
 	)
 	before := time.Now()
@@ -133,7 +131,7 @@ func (c *Client) Create(key string) {
 	acl := zk.WorldACL(zk.PermAll)
 	_, err := c.getConn().Create(key, []byte("douyudouyu"), flag, acl)
 	if err != nil {
-		c.Errorw("zk create key failed",
+		log.Errorw("zk create key failed",
 			"error", err,
 			"key", key,
 		)
@@ -141,7 +139,7 @@ func (c *Client) Create(key string) {
 }
 
 func (c *Client) get(key string) (value string, exist bool, err error) {
-	c.Debugw("zk get",
+	log.Debugw("zk get",
 		"key", key,
 	)
 	before := time.Now()
@@ -153,12 +151,12 @@ func (c *Client) get(key string) (value string, exist bool, err error) {
 		if err == zk.ErrNoNode {
 			err = nil
 			exist = false
-			c.Warnw("zk get but not exist",
+			log.Warnw("zk get but not exist",
 				"key", key,
 			)
 		} else {
 			status = err.Error()
-			c.Errorw("zk get failed",
+			log.Errorw("zk get failed",
 				"key", key,
 				"error", err,
 			)
@@ -184,12 +182,12 @@ func (c *Client) Get(key string) (value string, exist bool) {
 
 // Delete 暂时不用
 //func (c *Client) Delete(key string) {
-//	c.Debugw("zk delete",
+//	log.Debugw("zk delete",
 //		"key", key,
 //	)
 //	_, s, err := c.getConn().Get(key)
 //	for err != nil {
-//		c.Errorw("zk delete failed",
+//		log.Errorw("zk delete failed",
 //			"key", key,
 //			"error", err,
 //		)
@@ -199,7 +197,7 @@ func (c *Client) Get(key string) (value string, exist bool) {
 //	// TODO: 提升健壮性，处理删除冲突，进行重试
 //	err = c.getConn().Delete(key, s.Version)
 //	for err != nil {
-//		c.Errorw("zk delete failed",
+//		log.Errorw("zk delete failed",
 //			"key", key,
 //			"error", err,
 //		)
@@ -209,7 +207,7 @@ func (c *Client) Get(key string) (value string, exist bool) {
 //}
 
 func (c *Client) list(key string) (children []string, err error) {
-	c.Debugw("zk list",
+	log.Debugw("zk list",
 		"key", key,
 	)
 	before := time.Now()
@@ -217,7 +215,7 @@ func (c *Client) list(key string) (children []string, err error) {
 	cost := time.Since(before)
 	status := "success"
 	if err != nil && err != zk.ErrNoNode {
-		c.Errorw("zk list failed",
+		log.Errorw("zk list failed",
 			"key", key,
 			"error", err,
 		)
@@ -241,7 +239,7 @@ func (c *Client) List(key string) (children []string) {
 }
 
 func (c *Client) listW(key string) (children []string, ch <-chan zk.Event, err error) {
-	c.Debugw("zk list watch",
+	log.Debugw("zk list watch",
 		"key", key,
 	)
 	before := time.Now()
@@ -249,7 +247,7 @@ func (c *Client) listW(key string) (children []string, ch <-chan zk.Event, err e
 	cost := time.Since(before)
 	status := "success"
 	if err != nil && err != zk.ErrNoNode {
-		c.Errorw("failed to list watch zookeeper",
+		log.Errorw("failed to list watch zookeeper",
 			"key", key,
 			"error", err,
 		)
@@ -273,7 +271,7 @@ func (c *Client) ListW(key string) (children []string, ch <-chan zk.Event) {
 }
 
 func (c *Client) connect() (conn *zk.Conn, err error) {
-	c.Debugw("zk connect",
+	log.Debugw("zk connect",
 		"servers", c.servers,
 	)
 	conn, _, err = zk.Connect(c.servers, time.Second*10)
@@ -283,7 +281,7 @@ func (c *Client) connect() (conn *zk.Conn, err error) {
 func (c *Client) connectUntilSuccess() *zk.Conn {
 	conn, err := c.connect()
 	for err != nil { // 如果连接失败，一直重试，直到成功
-		c.Errorw("failed to connect to zooKeeper, retrying...",
+		log.Errorw("failed to connect to zooKeeper, retrying...",
 			"error", err,
 			"servers", c.servers,
 		)

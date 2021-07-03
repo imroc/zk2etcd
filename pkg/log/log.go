@@ -1,19 +1,43 @@
 package log
 
 import (
+	flag "github.com/spf13/pflag"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-type Logger struct {
-	*zap.SugaredLogger
+var logger *zap.SugaredLogger
+
+func GetLogger() *zap.Logger {
+	return logger.Desugar()
 }
 
-func New(level string) *Logger {
+func Init(opt *Option) {
+	if opt == nil {
+		return
+	}
+	logger = opt.buildLogger().Sugar()
+}
+
+type Option struct {
+	LogLevel string
+}
+
+func AddFlags(fs *flag.FlagSet) *Option {
+	var opt Option
+	opt.AddFlags(fs)
+	return &opt
+}
+
+func (opt *Option) AddFlags(fs *flag.FlagSet) {
+	fs.StringVar(&opt.LogLevel, "log-level", "info", "log output level，possible values: 'debug', 'info', 'warn', 'error', 'panic', 'fatal'")
+}
+
+func (opt *Option) buildLogger() *zap.Logger {
 
 	var lv zapcore.Level
 
-	switch level {
+	switch opt.LogLevel {
 	case "debug":
 		lv = zapcore.DebugLevel
 	case "info":
@@ -46,9 +70,9 @@ func New(level string) *Logger {
 		OutputPaths:      []string{"stdout"},
 		ErrorOutputPaths: []string{"stderr"},
 	}
-	logger, _ := config.Build()
-	sugar := logger.Sugar()
-	return &Logger{
-		sugar,
+	log, err := config.Build()
+	if err != nil {
+		panic(err)
 	}
+	return log
 }

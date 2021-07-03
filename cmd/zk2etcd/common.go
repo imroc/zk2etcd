@@ -33,15 +33,14 @@ func (c *Common) AddFlags(fs *flag.FlagSet) {
 	fs.StringVar(&c.logLevel, "log-level", "info", "log output level，possible values: 'debug', 'info', 'warn', 'error', 'panic', 'fatal'")
 }
 
-func (c *Common) GetAll() (zkClient *zookeeper.Client, etcdClient *etcd.Client, logger *log.Logger, zkPrefixes, zkExcludePrefixes []string) {
+func (c *Common) GetAll() (zkClient *zookeeper.Client, etcdClient *etcd.Client, zkPrefixes, zkExcludePrefixes []string) {
 	zkPrefixes = strings.Split(c.zookeeperPrefix, ",")
 	if len(zkPrefixes) == 0 {
 		zkPrefixes = append(zkPrefixes, "/")
 	}
 	zkExcludePrefixes = strings.Split(c.zookeeperExcludePrefix, ",")
 
-	logger = log.New(c.logLevel)
-	zkClient = zookeeper.NewClient(logger, strings.Split(c.zookeeperServers, ","))
+	zkClient = zookeeper.NewClient(strings.Split(c.zookeeperServers, ","))
 
 	var tlsConfig *tls.Config
 	var etcdCert []tls.Certificate
@@ -50,7 +49,7 @@ func (c *Common) GetAll() (zkClient *zookeeper.Client, etcdClient *etcd.Client, 
 	if c.etcdCertFile != "" && c.etcdKeyFile != "" { // 加载 etcd client 证书
 		etcdClientCert, err := tls.LoadX509KeyPair(c.etcdCertFile, c.etcdKeyFile)
 		if err != nil {
-			logger.Panicw("load client tls error",
+			log.Panicw("load client tls error",
 				"error", err,
 			)
 		}
@@ -60,7 +59,7 @@ func (c *Common) GetAll() (zkClient *zookeeper.Client, etcdClient *etcd.Client, 
 	if c.etcdCaFile != "" { // 加载 etcd CA 证书
 		etcdCA, err := ioutil.ReadFile(c.etcdCaFile)
 		if err != nil {
-			logger.Panicw("read etcd ca file error",
+			log.Panicw("read etcd ca file error",
 				"error", err,
 			)
 		}
@@ -74,6 +73,6 @@ func (c *Common) GetAll() (zkClient *zookeeper.Client, etcdClient *etcd.Client, 
 			Certificates: etcdCert,
 		}
 	}
-	etcdClient = etcd.NewClient(logger, strings.Split(c.etcdServers, ","), tlsConfig)
+	etcdClient = etcd.NewClient(strings.Split(c.etcdServers, ","), tlsConfig)
 	return
 }

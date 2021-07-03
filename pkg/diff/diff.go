@@ -13,7 +13,6 @@ import (
 )
 
 type Diff struct {
-	*log.Logger
 	zk              *zookeeper.Client
 	zkPrefix        []string
 	zkExcludePrefix []string
@@ -32,12 +31,11 @@ type Diff struct {
 	stopChan        chan struct{}
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint) *Diff {
+func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, concurrency uint) *Diff {
 	return &Diff{
 		zk:              zkClient,
 		zkPrefix:        zkPrefix,
 		zkExcludePrefix: zkExcludePrefix,
-		Logger:          logger,
 		etcd:            etcd,
 		concurrency:     concurrency,
 		etcdKeys:        map[string]bool{},
@@ -52,7 +50,7 @@ func (d *Diff) GetKeyCount() string {
 
 func (d *Diff) starDiffWorkers() {
 
-	d.Infow("start worker",
+	log.Infow("start worker",
 		"concurrency", d.concurrency,
 	)
 	for i := uint(0); i < d.concurrency; i++ { // handle key
@@ -62,7 +60,7 @@ func (d *Diff) starDiffWorkers() {
 				case key := <-d.keys:
 					d.handleKey(key)
 				case <-d.stopChan:
-					d.Debug("stop diff worker")
+					log.Debug("stop diff worker")
 					return
 				}
 			}
@@ -114,14 +112,14 @@ func (d *Diff) Run() {
 	wg.Wait()
 	cost := time.Since(before)
 	d.etcdKeyCount = len(d.etcdKeys)
-	d.Infow("fetched data from etcd",
+	log.Infow("fetched data from etcd",
 		"duration", cost.String(),
 		"count", d.etcdKeyCount,
 	)
 
 	for _, prefix := range d.zkPrefix {
 		if !d.zk.Exists(prefix) {
-			d.Warnw("prefix key not exsits",
+			log.Warnw("prefix key not exsits",
 				"key", prefix,
 			)
 			continue
@@ -185,7 +183,7 @@ func (d *Diff) Fix() {
 	d.conDo(int(d.concurrency), d.missed, func(key string) {
 		value, ok := d.zk.Get(key)
 		if !ok {
-			d.Errorw("try add etcd key but not exist in zk",
+			log.Errorw("try add etcd key but not exist in zk",
 				"key", key,
 			)
 			return
@@ -207,7 +205,7 @@ func (d *Diff) PrintSummary() {
 func (d *Diff) shouldExclude(key string) bool {
 	for _, prefix := range d.zkExcludePrefix { // exclude prefix
 		if strings.HasPrefix(key, prefix) {
-			d.Debugw("ignore key in excluded prefix",
+			log.Debugw("ignore key in excluded prefix",
 				"key", key,
 				"excludePrefix", prefix,
 			)

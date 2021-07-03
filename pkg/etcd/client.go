@@ -41,21 +41,19 @@ func timeoutContext() context.Context {
 }
 
 type Client struct {
-	*log.Logger
 	servers []string
 	*clientv3.Client
 	tls *tls.Config
 }
 
-func NewClient(logger *log.Logger, servers []string, tls *tls.Config) *Client {
+func NewClient(servers []string, tls *tls.Config) *Client {
 	client := &Client{
-		Logger:  logger,
 		servers: servers,
 		tls:     tls,
 	}
 	err := client.init()
 	if err != nil {
-		logger.Errorw("init etcd client failed",
+		log.Errorw("init etcd client failed",
 			"error", err,
 		)
 	}
@@ -66,7 +64,7 @@ func (c *Client) init() error {
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   c.servers,
 		DialTimeout: 5 * time.Second,
-		Logger:      c.Desugar(),
+		Logger:      log.GetLogger(),
 		TLS:         c.tls,
 	})
 	if err != nil {
@@ -78,7 +76,7 @@ func (c *Client) init() error {
 
 func (c *Client) put(key, value string) error {
 	before := time.Now()
-	c.Debugw("etcd put",
+	log.Debugw("etcd put",
 		"key", key,
 		"value", value,
 	)
@@ -87,7 +85,7 @@ func (c *Client) put(key, value string) error {
 	status := "success"
 	if err != nil {
 		status = err.Error()
-		c.Errorw("etcd put failed",
+		log.Errorw("etcd put failed",
 			"key", key,
 			"error", err.Error(),
 		)
@@ -112,7 +110,7 @@ func (c *Client) Put(key, value string) {
 }
 
 func (c *Client) delete(key string, prefix bool) error {
-	c.Debugw("etcd delete key",
+	log.Debugw("etcd delete key",
 		"key", key,
 		"withPrefix", prefix,
 	)
@@ -126,7 +124,7 @@ func (c *Client) delete(key string, prefix bool) error {
 	status := "success"
 	if err != nil {
 		status = err.Error()
-		c.Errorw("etcd delete failed",
+		log.Errorw("etcd delete failed",
 			"key", key,
 			"error", err.Error(),
 		)
@@ -152,7 +150,7 @@ func (c *Client) DeleteWithPrefix(key string) {
 
 func (c *Client) get(key string) (value string, ok bool, err error) {
 	defer func() {
-		c.Debugw("etcd get",
+		log.Debugw("etcd get",
 			"key", key,
 			"value", value,
 			"exist", ok,
@@ -166,7 +164,7 @@ func (c *Client) get(key string) (value string, ok bool, err error) {
 
 	if err != nil {
 		status = err.Error()
-		c.Errorw("etcd get failed",
+		log.Errorw("etcd get failed",
 			"key", key,
 			"error", err.Error(),
 		)
@@ -194,7 +192,7 @@ func (c *Client) Get(key string) (value string, ok bool) {
 }
 
 func (c *Client) list(key string) ([]string, error) {
-	c.Debugw("etcd list",
+	log.Debugw("etcd list",
 		"prefix", key,
 	)
 
@@ -204,7 +202,7 @@ func (c *Client) list(key string) ([]string, error) {
 
 	status := "success"
 	if err != nil {
-		c.Errorw("etcd failed to get",
+		log.Errorw("etcd failed to get",
 			"key", key,
 			"error", err,
 		)

@@ -27,8 +27,13 @@ func newGenzkCmd(args []string) *cobra.Command {
 
 		DisableAutoGenTag: true,
 
+		PreRun: func(cmd *cobra.Command, args []string) {
+			opt := &log.Option{LogLevel: "debug"}
+			log.Init(opt)
+		},
+
 		Run: func(cmd *cobra.Command, args []string) {
-			zkClient := zookeeper.NewClient(log.New("debug"), strings.Split(zookeeperServers, ","))
+			zkClient := zookeeper.NewClient(strings.Split(zookeeperServers, ","))
 			ch := make(chan string, concurrent)
 			go func() {
 				for i := uint(0); i < parentCount; i++ {

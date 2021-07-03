@@ -16,7 +16,6 @@ import (
 )
 
 type Syncer struct {
-	*log.Logger
 	zk               *zookeeper.Client
 	zkPrefix         []string
 	zkExcludePrefix  []string
@@ -31,12 +30,11 @@ type Syncer struct {
 	stop             <-chan struct{}
 }
 
-func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, logger *log.Logger, concurrency uint, fullSyncInterval time.Duration, stop <-chan struct{}) *Syncer {
+func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *etcd.Client, concurrency uint, fullSyncInterval time.Duration, stop <-chan struct{}) *Syncer {
 	return &Syncer{
 		zk:               zkClient,
 		zkPrefix:         zkPrefix,
 		zkExcludePrefix:  zkExcludePrefix,
-		Logger:           logger,
 		etcd:             etcd,
 		concurrency:      concurrency,
 		keysToSync:       make(chan string, concurrency),
@@ -47,7 +45,7 @@ func New(zkClient *zookeeper.Client, zkPrefix, zkExcludePrefix []string, etcd *e
 }
 
 func (s *Syncer) startWorker() {
-	s.Info("start worker",
+	log.Info("start worker",
 		"concurrency", s.concurrency,
 	)
 
@@ -62,7 +60,7 @@ func (s *Syncer) startWorker() {
 }
 
 func (s *Syncer) SyncIncremental() {
-	s.Info("start incremental sync")
+	log.Info("start incremental sync")
 
 	for _, prefix := range s.zkPrefix {
 		s.syncWatchRecursive(prefix, s.stop)
@@ -70,41 +68,41 @@ func (s *Syncer) SyncIncremental() {
 }
 
 func (s *Syncer) FullSync() {
-	s.Info("start full sync")
+	log.Info("start full sync")
 	before := time.Now()
 
-	d := diff.New(s.zk, s.zkPrefix, s.zkExcludePrefix, s.etcd, s.Logger, s.concurrency)
+	d := diff.New(s.zk, s.zkPrefix, s.zkExcludePrefix, s.etcd, s.concurrency)
 
-	s.Info("start full sync diff")
+	log.Info("start full sync diff")
 	d.Run()
-	s.Info("complete full sync diff")
+	log.Info("complete full sync diff")
 
-	s.Info("start full sync fix")
+	log.Info("start full sync fix")
 	d.Fix()
-	s.Info("complete full sync fix")
+	log.Info("complete full sync fix")
 
 	cost := time.Since(before)
-	s.Infow("full sync completed",
+	log.Infow("full sync completed",
 		"cost", cost.String(),
 	)
 }
 
 func (s *Syncer) ensureClients() {
-	s.Debugw("check zk")
+	log.Debugw("check zk")
 	for _, prefix := range s.zkPrefix {
 		s.zk.EnsureExists(prefix)
 	}
-	s.Info("check zk success")
-	s.Debugw("check etcd")
+	log.Info("check zk success")
+	log.Debugw("check etcd")
 	s.etcd.Get("/")
-	s.Info("check etcd success")
+	log.Info("check etcd success")
 }
 
 func (s *Syncer) startHttpServer() {
 	http.Handle("/metrics", promhttp.Handler())
 	err := http.ListenAndServe(":80", nil)
 	if err != nil {
-		s.Fatalw("http listen failed",
+		log.Fatalw("http listen failed",
 			"error", err.Error(),
 		)
 	}
@@ -148,7 +146,7 @@ func (s *Syncer) removeWatch(key string) {
 	s.watcherLock.Lock()
 	_, ok := s.watcher[key]
 	if !ok {
-		s.Warnw("remove watch but watcher does not exist",
+		log.Warnw("remove watch but watcher does not exist",
 			"key", key,
 		)
 		s.watcherLock.Unlock()
@@ -159,7 +157,7 @@ func (s *Syncer) removeWatch(key string) {
 }
 
 func (s *Syncer) handleEvent(event zk.Event) bool {
-	s.Debugw("handle event",
+	log.Debugw("handle event",
 		"type", event.Type.String(),
 		"state", event.State.String(),
 		"error", event.Err,
@@ -174,7 +172,7 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 		s.syncChildren(event.Path)
 		return true
 	case zk.EventNotWatching:
-		s.Warnw("received zk not watching event",
+		log.Warnw("received zk not watching event",
 			"type", event.Type.String(),
 			"state", event.State.String(),
 			"error", event.Err,
@@ -183,7 +181,7 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 		s.zk.ReConnect()
 		return true
 	default:
-		s.Warnw("unknown event",
+		log.Warnw("unknown event",
 			"type", event.Type.String(),
 			"state", event.State.String(),
 			"error", event.Err,
@@ -202,14 +200,14 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 	s.watcher[key] = struct{}{}
 	s.watcherLock.Unlock()
 
-	s.Debugw("watch key",
+	log.Debugw("watch key",
 		"key", key,
 	)
 
 	children, ch := s.zk.ListW(key)
 
 	if ch == nil {
-		s.Warnw("key not exist",
+		log.Warnw("key not exist",
 			"key", key,
 		)
 		return children
@@ -225,7 +223,7 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 				}
 				children, ch = s.zk.ListW(key)
 				if ch == nil {
-					s.Warnw("continue list watch children but key not exist any more",
+					log.Warnw("continue list watch children but key not exist any more",
 						"key", key,
 					)
 					s.removeWatch(event.Path)
@@ -262,7 +260,7 @@ func (s *Syncer) syncWatchRecursive(key string, stop <-chan struct{}) {
 func (s *Syncer) shouldExclude(key string) bool {
 	for _, prefix := range s.zkExcludePrefix { // exclude prefix
 		if strings.HasPrefix(key, prefix) {
-			s.Debugw("ignore key in excluded prefix",
+			log.Debugw("ignore key in excluded prefix",
 				"key", key,
 				"excludePrefix", prefix,
 			)
@@ -287,7 +285,7 @@ func (s *Syncer) syncKeyRecursive(key string) {
 }
 
 func (s *Syncer) syncKey(key string) {
-	s.Debugw("sync key",
+	log.Debugw("sync key",
 		"key", key,
 	)
 	defer s.keyCountSynced.Inc()
@@ -295,26 +293,26 @@ func (s *Syncer) syncKey(key string) {
 	etcdValue, existInEtcd := s.etcd.Get(key)
 	switch {
 	case existInZK && !existInEtcd: // etcd 中缺失，补齐
-		s.Debugw("key not exist in etcd, put in etcd",
+		log.Debugw("key not exist in etcd, put in etcd",
 			"key", key,
 			"value", zkValue,
 		)
 		s.etcd.Put(key, zkValue)
 		s.syncWatchRecursive(key, s.stop) // 可能是新增的，确保 watch 下
 	case !existInZK && existInEtcd: // etcd 中多出 key，删除
-		s.Debugw("key not exist in zk, remove in etcd",
+		log.Debugw("key not exist in zk, remove in etcd",
 			"key", key,
 		)
 		s.etcd.DeleteWithPrefix(key)
 	case existInZK && existInEtcd && (zkValue != etcdValue): // key 都存在，但 value 不同，纠正 etcd 中的 value
-		s.Debugw("value differs",
+		log.Debugw("value differs",
 			"key", key,
 			"zkValue", zkValue,
 			"etcdValue", etcdValue,
 		)
 		s.etcd.Put(key, zkValue)
 	default:
-		s.Debugw("sync ignore",
+		log.Debugw("sync ignore",
 			"key", key,
 			"existInZK", existInZK,
 			"existInEtcd", existInEtcd,
@@ -325,7 +323,7 @@ func (s *Syncer) syncKey(key string) {
 }
 
 func (s *Syncer) syncChildren(key string) {
-	s.Debugw("sync children",
+	log.Debugw("sync children",
 		"key", key,
 	)
 	children := s.zk.List(key)
