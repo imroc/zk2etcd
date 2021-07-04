@@ -1,5 +1,10 @@
 # zk2etcd 变更历史
 
+## v0.15.0 (2021.07.04)
+
+* 大量重构: zk,etcd,logging 相关逻辑在单独的包中高内聚，引入全局默认对象，初始化+flag+option逻辑封装，减少复杂度和bug风险，降低继续叠加功能的成本。
+* 同步循环引入debounce逻辑，避免短时间内频繁ChildrenChanged导致频繁sync，也避免 ChildrenChanged 与 NodeDeleted 并行导致不一致问题。
+
 ## v0.14.0 (2021.07.02)
 
 * 支持 prometheus metrics
