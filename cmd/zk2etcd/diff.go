@@ -35,10 +35,10 @@ func newDiffCmd(args []string) *cobra.Command {
 			d := diff.New(zkPrefixes, zkExcludePrefixes, concurrent)
 			before := time.Now()
 			d.Run()
-			d.PrintSummary()
 			if fix {
 				d.Fix()
 			}
+			d.PrintSummary()
 			cost := time.Since(before)
 			fmt.Println("total cost: ", cost)
 		},

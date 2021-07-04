@@ -98,6 +98,27 @@ func (d *Diff) handleKey(key string) {
 	d.zkKeyCount.Inc()
 }
 
+// 对照结果重新 check 一遍，避免 diff 期间频繁变更，递归查询结果与实际不一致
+func (d *Diff) recheck() {
+	etcdKeys := make(map[string]bool)
+	for key, _ := range d.etcdKeys { // 如果重新check仍然是多余的key，才认为是多余的key
+		_, existInEtcd := etcd.Get("key")
+		if existInEtcd {
+			etcdKeys[key] = true
+		}
+	}
+	d.etcdKeys = etcdKeys
+
+	missed := []string{}
+	for _, key := range d.missed { // 如果重新check仍然是缺失的key，才认为是缺失的key
+		_, existInEtcd := etcd.Get("key")
+		if !existInEtcd {
+			missed = append(missed, key)
+		}
+	}
+	d.missed = missed
+}
+
 func (d *Diff) Run() {
 	d.starDiffWorkers()
 	var wg sync.WaitGroup
@@ -125,8 +146,9 @@ func (d *Diff) Run() {
 
 	time.Sleep(time.Second)
 	d.workerWg.Wait()
-
 	close(d.stopChan)
+
+	d.recheck() // 拿着重新check一遍，避免频繁变更导致结果不一致
 
 	for k, _ := range d.etcdKeys {
 		d.extra = append(d.extra, k)
