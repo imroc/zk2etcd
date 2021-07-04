@@ -153,7 +153,7 @@ func (s *Syncer) removeWatch(key string) {
 }
 
 func (s *Syncer) handleEvent(event zk.Event) bool {
-	log.Debugw("handle event",
+	log.Infow("handle event",
 		"type", event.Type.String(),
 		"state", event.State.String(),
 		"error", event.Err,
@@ -161,12 +161,9 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 	)
 	switch event.Type {
 	case zk.EventNodeDeleted:
-		etcd.DeleteWithPrefix(event.Path)
+		etcd.Delete(event.Path, false)
 		s.removeWatch(event.Path)
 		return false
-	case zk.EventNodeChildrenChanged:
-		s.syncChildren(event.Path)
-		return true
 	case zk.EventNotWatching:
 		log.Warnw("received zk not watching event",
 			"type", event.Type.String(),
@@ -186,6 +183,17 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 		return false
 	}
 }
+
+const (
+	// debounceAfter is the delay added to events to wait after a registry event for debouncing.
+	// This will delay the push by at least this interval, plus the time getting subsequent events.
+	// If no change is detected the push will happen, otherwise we'll keep delaying until things settle.
+	debounceAfter = 1 * time.Second
+
+	// debounceMax is the maximum time to wait for events while debouncing.
+	// Defaults to 10 seconds. If events keep showing up with no break for this time, we'll trigger a push.
+	debounceMax = 10 * time.Second
+)
 
 func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 	s.watcherLock.Lock()
@@ -210,25 +218,46 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 	}
 
 	go func() {
+		var lastChildrenChangedTime time.Time
+		var startDebounce time.Time
+		var timeChan <-chan time.Time
+		debouncedEvents := 0
 		for {
 			select {
 			case event := <-ch:
-				shouldContinue := s.handleEvent(event)
-				if !shouldContinue {
-					return
+				if event.Type == zk.EventNodeChildrenChanged { // 短时间内频繁变更，避免频繁同步
+					lastChildrenChangedTime = time.Now()
+					if debouncedEvents == 0 {
+						startDebounce = lastChildrenChangedTime
+					}
+					debouncedEvents++
+					timeChan = time.After(debounceAfter)
+				} else {
+					shouldContinue := s.handleEvent(event)
+					if !shouldContinue {
+						return
+					}
 				}
 				children, ch = zookeeper.ListW(key)
-				if ch == nil {
-					log.Debugw("continue list watch children but key not exist any more",
-						"key", key,
-					)
-					s.removeWatch(event.Path)
+				if ch == nil { // rmr 清空场景，当收到 children changed 事件时，list watch 会失败
+					etcd.Delete(key, false)
+					s.removeWatch(key)
 					return
 				}
-				for _, child := range children {
-					newKey := filepath.Join(key, child)
-					s.watch(newKey, stop)
-					s.syncKey(newKey)
+			case <-timeChan:
+				eventDelay := time.Since(startDebounce)
+				quietTime := time.Since(lastChildrenChangedTime)
+				if eventDelay >= debounceMax || quietTime >= debounceAfter {
+					if debouncedEvents > 0 { // 开始同步
+						s.syncChildren(key, stop)
+						if !zookeeper.Exists(key) {
+							etcd.Delete(key, false)
+							s.removeWatch((key))
+						}
+						debouncedEvents = 0
+					}
+				} else {
+					timeChan = time.After(debounceAfter - quietTime)
 				}
 			case <-stop:
 				return
@@ -295,7 +324,7 @@ func (s *Syncer) syncKey(key string) {
 		)
 		etcd.Put(key, zkValue)
 		s.syncWatchRecursive(key, s.stop) // 可能是新增的，确保 watch 下
-	case !existInZK && existInEtcd: // etcd 中多出 key，删除
+	case !existInZK && existInEtcd: // etcd 中多出 key，删除，一般不会发生
 		log.Debugw("key not exist in zk, remove in etcd",
 			"key", key,
 		)
@@ -318,13 +347,14 @@ func (s *Syncer) syncKey(key string) {
 	}
 }
 
-func (s *Syncer) syncChildren(key string) {
+func (s *Syncer) syncChildren(key string, stop <-chan struct{}) {
 	log.Infow("sync children",
 		"key", key,
 	)
 	children := zookeeper.List(key)
 	for _, child := range children {
 		fullPath := filepath.Join(key, child)
+		s.watch(key, stop)
 		s.syncKey(fullPath)
 	}
 }
