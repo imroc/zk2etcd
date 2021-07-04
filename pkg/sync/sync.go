@@ -328,7 +328,7 @@ func (s *Syncer) syncKey(key string) {
 		log.Debugw("key not exist in zk, remove in etcd",
 			"key", key,
 		)
-		etcd.DeleteWithPrefix(key)
+		etcd.Delete(key, false)
 	case existInZK && existInEtcd && (zkValue != etcdValue): // key 都存在，但 value 不同，纠正 etcd 中的 value
 		log.Debugw("value differs",
 			"key", key,

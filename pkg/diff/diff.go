@@ -22,7 +22,6 @@ type Diff struct {
 	mux             sync.Mutex
 	zkKeys          sync.Map
 	missed          []string
-	extra           []string
 	keys            chan string
 	etcdKeys        map[string]bool
 	workerWg        sync.WaitGroup
@@ -102,17 +101,27 @@ func (d *Diff) handleKey(key string) {
 func (d *Diff) recheck() {
 	etcdKeys := make(map[string]bool)
 	for key, _ := range d.etcdKeys { // 如果重新check仍然是多余的key，才认为是多余的key
-		_, existInEtcd := etcd.Get("key")
+		_, existInEtcd := etcd.Get(key)
 		if existInEtcd {
 			etcdKeys[key] = true
+		} else {
+			d.etcdKeyCount--
 		}
 	}
 	d.etcdKeys = etcdKeys
 
 	missed := []string{}
 	for _, key := range d.missed { // 如果重新check仍然是缺失的key，才认为是缺失的key
-		_, existInEtcd := etcd.Get("key")
-		if !existInEtcd {
+		_, existInEtcd := etcd.Get(key)
+		//log.Infow("etcd get value",
+		//	"key", key,
+		//	"value", value,
+		//	"existInEtcd", existInEtcd,
+		//)
+		if existInEtcd {
+			d.etcdKeyCount++
+		} else {
+			//log.Info("still missing " + key)
 			missed = append(missed, key)
 		}
 	}
@@ -150,10 +159,6 @@ func (d *Diff) Run() {
 
 	d.recheck() // 拿着重新check一遍，避免频繁变更导致结果不一致
 
-	for k, _ := range d.etcdKeys {
-		d.extra = append(d.extra, k)
-	}
-	d.etcdKeys = nil
 }
 
 func (d *Diff) conDo(cocurrent int, keys []string, doFunc func(string)) {
@@ -191,9 +196,17 @@ func (d *Diff) conDo(cocurrent int, keys []string, doFunc func(string)) {
 	close(stop)
 }
 
+func (d *Diff) getExtraKeys() []string {
+	extra := []string{}
+	for k, _ := range d.etcdKeys {
+		extra = append(extra, k)
+	}
+	return extra
+}
+
 func (d *Diff) Fix() {
 	// 删除 etcd 多余的 key
-	d.conDo(int(d.concurrency), d.extra, func(key string) {
+	d.conDo(int(d.concurrency), d.getExtraKeys(), func(key string) {
 		etcd.Delete(key, false)
 	})
 
@@ -208,16 +221,18 @@ func (d *Diff) Fix() {
 		}
 		etcd.Put(key, value)
 	})
+	d.recheck()
 }
 
 func (d *Diff) PrintSummary() {
 	// 输出统计
+	extra := d.getExtraKeys()
 	fmt.Println("zookeeper key count:", d.zkKeyCount.String())
 	fmt.Println("etcd key count:", d.etcdKeyCount)
 	fmt.Println("etcd missed key count:", len(d.missed))
-	fmt.Println("etcd extra key count:", len(d.extra))
+	fmt.Println("etcd extra key count:", len(extra))
 	fmt.Println("etcd missed keys:", d.missed)
-	fmt.Println("etcd extra keys:", d.extra)
+	fmt.Println("etcd extra keys:", extra)
 }
 
 func (d *Diff) shouldExclude(key string) bool {
