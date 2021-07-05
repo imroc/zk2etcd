@@ -166,7 +166,7 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 	)
 	switch event.Type {
 	case zk.EventNodeDeleted:
-		etcd.Delete(event.Path, false)
+		etcd.Delete(event.Path)
 		s.removeWatch(event.Path)
 		return false
 	case zk.EventNotWatching:
@@ -245,7 +245,7 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 				}
 				children, ch = zookeeper.ListW(key)
 				if ch == nil { // rmr 清空场景，当收到 children changed 事件时，list watch 会失败
-					etcd.Delete(key, false)
+					etcd.Delete(key)
 					s.removeWatch(key)
 					return
 				}
@@ -256,7 +256,7 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 					if debouncedEvents > 0 { // 开始同步
 						s.syncChildren(key, stop)
 						if !zookeeper.Exists(key) {
-							etcd.Delete(key, false)
+							etcd.Delete(key)
 							s.removeWatch((key))
 						}
 						debouncedEvents = 0
@@ -333,7 +333,7 @@ func (s *Syncer) syncKey(key string) {
 		log.Debugw("key not exist in zk, remove in etcd",
 			"key", key,
 		)
-		etcd.Delete(key, false)
+		etcd.Delete(key)
 	case existInZK && existInEtcd && (zkValue != etcdValue): // key 都存在，但 value 不同，纠正 etcd 中的 value
 		log.Debugw("value differs",
 			"key", key,

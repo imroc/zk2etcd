@@ -113,17 +113,12 @@ func (c *Client) Put(key, value string) {
 	})
 }
 
-func (c *Client) delete(key string, prefix bool) error {
+func (c *Client) delete(key string) error {
 	log.Infow("etcd delete key",
 		"key", key,
-		"withPrefix", prefix,
 	)
-	opts := []clientv3.OpOption{}
-	if prefix {
-		opts = append(opts, clientv3.WithPrefix())
-	}
 	before := time.Now()
-	_, err := c.Client.Delete(timeoutContext(), key, opts...)
+	_, err := c.Client.Delete(timeoutContext(), key)
 	cost := time.Since(before)
 	status := "success"
 	if err != nil {
@@ -138,26 +133,21 @@ func (c *Client) delete(key string, prefix bool) error {
 	return err
 }
 
-func Delete(key string, prefix bool) {
-	client.Delete(key, prefix)
+func Delete(key string) bool {
+	return client.Delete(key)
 }
 
-func (c *Client) Delete(key string, prefix bool) {
+func (c *Client) Delete(key string) bool {
+	ok := false
 	c.do(func() bool {
-		err := c.delete(key, prefix)
+		err := c.delete(key)
 		if err != nil {
 			return false
 		}
+		ok = true
 		return true
 	})
-}
-
-func DeleteWithPrefix(key string) {
-	client.DeleteWithPrefix(key)
-}
-
-func (c *Client) DeleteWithPrefix(key string) {
-	c.Delete(key, true)
+	return ok
 }
 
 func (c *Client) get(key string) (value string, ok bool, err error) {

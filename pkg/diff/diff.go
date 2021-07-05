@@ -209,7 +209,7 @@ func (d *Diff) Fix() (missedCount, extraCount int) {
 	extraKeys := d.getExtraKeys()
 	extraCount = len(extraKeys)
 	d.conDo(int(d.concurrency), extraKeys, func(key string) {
-		etcd.Delete(key, false)
+		etcd.Delete(key)
 	})
 
 	// 补齐 etcd 缺失的 key
