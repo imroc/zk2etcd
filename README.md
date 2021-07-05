@@ -35,8 +35,9 @@ zk2etcd 通过 80 端口 (暂时写死) 暴露 metrics，路径 `/metrics`，包
   * zk p95时延: histogram_quantile(0.95, sum(rate(zk2etcd_zk_op_duration_seconds_bucket[1m])) by (le))
   * zk p99时延: histogram_quantile(0.99, sum(rate(zk2etcd_zk_op_duration_seconds_bucket[1m])) by (le))
 * zk2etcd_fixed_total: 全量同步 fix 时，删除或补齐 etcd 数据次数统计(通常是增量同步时丢失event导致的部分数据不同步)
-  * 统计因etcd数据缺失导致的数据补齐操作次数: sum(rate(zk2etcd_fixed_total{type="put"}[2m]))
-  * 统计因etcd数据多余导致的数据删除操作次数: sum(rate(zk2etcd_fixed_total{type="delete"}[2m]))
+  * 统计因etcd数据缺失导致的数据补齐操作次数: sum(rate(zk2etcd_fixed_total{type="put"}[1m]))
+  * 统计因etcd数据多余导致的数据删除操作次数: sum(rate(zk2etcd_fixed_total{type="delete"}[1m]))
+  * 统计全部fix操作: sum(rate(zk2etcd_fixed_total[1m]))
   
 grafana 面板示例:
 
