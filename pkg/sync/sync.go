@@ -74,13 +74,18 @@ func (s *Syncer) FullSync() {
 	log.Info("complete full sync diff")
 
 	log.Info("start full sync fix")
-	d.Fix()
+	missedCount, extraCount := d.Fix()
 	log.Info("complete full sync fix")
-
 	cost := time.Since(before)
 	log.Infow("full sync completed",
 		"cost", cost.String(),
 	)
+	if missedCount != 0 {
+		Fix.WithLabelValues("put").Add(float64(missedCount))
+	}
+	if extraCount != 0 {
+		Fix.WithLabelValues("delete").Add(float64(extraCount))
+	}
 }
 
 func (s *Syncer) ensureClients() {

@@ -98,7 +98,7 @@ func (d *Diff) handleKey(key string) {
 }
 
 // 对照结果重新 check 一遍，避免 diff 期间频繁变更，递归查询结果与实际不一致
-func (d *Diff) recheck() {
+func (d *Diff) Recheck() {
 	etcdKeys := make(map[string]bool)
 	for key, _ := range d.etcdKeys { // 如果重新check仍然是多余的key，才认为是多余的key
 		_, existInEtcd := etcd.Get(key)
@@ -157,7 +157,7 @@ func (d *Diff) Run() {
 	d.workerWg.Wait()
 	close(d.stopChan)
 
-	d.recheck() // 拿着重新check一遍，避免频繁变更导致结果不一致
+	d.Recheck() // 拿着重新check一遍，避免频繁变更导致结果不一致
 
 }
 
@@ -204,13 +204,16 @@ func (d *Diff) getExtraKeys() []string {
 	return extra
 }
 
-func (d *Diff) Fix() {
+func (d *Diff) Fix() (missedCount, extraCount int) {
 	// 删除 etcd 多余的 key
-	d.conDo(int(d.concurrency), d.getExtraKeys(), func(key string) {
+	extraKeys := d.getExtraKeys()
+	extraCount = len(extraKeys)
+	d.conDo(int(d.concurrency), extraKeys, func(key string) {
 		etcd.Delete(key, false)
 	})
 
 	// 补齐 etcd 缺失的 key
+	missedCount = len(d.missed)
 	d.conDo(int(d.concurrency), d.missed, func(key string) {
 		value, ok := zookeeper.Get(key)
 		if !ok {
@@ -221,7 +224,7 @@ func (d *Diff) Fix() {
 		}
 		etcd.Put(key, value)
 	})
-	d.recheck()
+	return
 }
 
 func (d *Diff) PrintSummary() {

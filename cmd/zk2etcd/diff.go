@@ -36,7 +36,10 @@ func newDiffCmd(args []string) *cobra.Command {
 			before := time.Now()
 			d.Run()
 			if fix {
-				d.Fix()
+				missedCount, extraCount := d.Fix()
+				fmt.Println("put missed count: ", missedCount)
+				fmt.Println("delete extra count: ", extraCount)
+				d.Recheck()
 			}
 			d.PrintSummary()
 			cost := time.Since(before)
