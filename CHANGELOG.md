@@ -1,5 +1,12 @@
 # zk2etcd 变更历史
 
+## v1.0.0 (2021.07.06)
+
+* metrics 增加 zk2etcd_fixed_total 指标，统计全量同步发生 fix 时的增删统计。
+* 修复增量同步时 exclude key 逻辑不生效问题。
+* 支持与其它同步工具共存，避免勿删其它工具写入的 key，引入 redis 存储状态，在 sync 和 diff 子命令增加 `--redis-server` 参数指定 redis 地址。
+* 完善运维手册
+
 ## v0.16.0 (2021.07.04)
 
 * 增强 diff: 递归 diff 判断之后立即拿着结果 recheck 一遍，避免频繁变更导致结果幻象。
