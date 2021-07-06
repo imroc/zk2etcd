@@ -116,7 +116,7 @@ zk2etcd 每个版本都有对应的容器镜像 (`imroc/zk2etcd`)，tag 与 版�
 
 ```bash
 $ docker run -d imroc/zk2etcd zk2etcd sync \
-  --redis-server=redis.test.svc.cluster.local:6379
+  --redis-server=redis.test.svc.cluster.local:6379 \
   --etcd-servers=etcd.test.svc.cluster.local:2379 \
   --zookeeper-servers=zookeeper.test.svc.cluster.local:2181 \
   --zookeeper-exclude-prefix=/dubbo/config,/roc/test \
@@ -128,7 +128,7 @@ $ docker run -d imroc/zk2etcd zk2etcd sync \
 
 ```bash
 $ docker run -it imroc/zk2etcd zk2etcd diff \
-  --redis-server=redis.test.svc.cluster.local:6379
+  --redis-server=redis.test.svc.cluster.local:6379 \
   --etcd-servers=etcd.test.svc.cluster.local:2379 \
   --zookeeper-servers=zookeeper.test.svc.cluster.local:2181 \
   --zookeeper-exclude-prefix=/dubbo/config,/roc/test \
