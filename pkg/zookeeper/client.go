@@ -44,9 +44,12 @@ func (c *Client) EnsureExists(key string) {
 				"key", key,
 				"error", err.Error(),
 			)
-		}
-		if exist {
+		} else if exist {
 			ok = true // 确保 key 存在才结束循环
+		} else {
+			log.Infow("key not existed, waiting for creation",
+				"key", key,
+			)
 		}
 		return
 	}, -1)
