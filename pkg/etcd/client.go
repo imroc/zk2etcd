@@ -110,12 +110,14 @@ func (c *Client) Put(key, value string) (err error) {
 		if err != nil {
 			return false
 		}
-		err = record.Put(key, value)
-		if err != nil {
-			log.Errorw("redis put error",
-				"key", key,
-				"error", err.Error(),
-			)
+		if record.Enable {
+			err = record.Put(key, value)
+			if err != nil {
+				log.Errorw("redis put error",
+					"key", key,
+					"error", err.Error(),
+				)
+			}
 		}
 		return true
 	})
@@ -154,12 +156,14 @@ func (c *Client) Delete(key string) bool {
 			return false
 		}
 		ok = true
-		err = record.Delete(key) // 同时清除sqlite中的记录
-		if err != nil {
-			log.Errorw("record delete error",
-				"key", key,
-				"error", err.Error(),
-			)
+		if record.Enable {
+			err = record.Delete(key) // 同时清除sqlite中的记录
+			if err != nil {
+				log.Errorw("record delete error",
+					"key", key,
+					"error", err.Error(),
+				)
+			}
 		}
 		return true
 	})

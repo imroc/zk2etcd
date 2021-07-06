@@ -104,17 +104,21 @@ func (d *Diff) Recheck() {
 	for key, _ := range d.etcdKeys { // 如果重新check仍然是多余的key，才认为是多余的key
 		_, existInEtcd := etcd.Get(key)
 		if existInEtcd {
-			_, exist, err := record.Get(key)
-			if exist { // 此 key 是 zk2etcd 之前写入的，才认为是多余的 key，允许删除
-				etcdKeys[key] = true
-			} else {
-				d.etcdKeyCount--
-				if err != nil {
-					log.Errorw("redis get failed",
-						"key", key,
-						"error", err.Error(),
-					)
+			if record.Enable {
+				_, exist, err := record.Get(key)
+				if exist { // 此 key 是 zk2etcd 之前写入的，才认为是多余的 key，允许删除
+					etcdKeys[key] = true
+				} else {
+					d.etcdKeyCount--
+					if err != nil {
+						log.Errorw("redis get failed",
+							"key", key,
+							"error", err.Error(),
+						)
+					}
 				}
+			} else {
+				etcdKeys[key] = true
 			}
 		} else {
 			d.etcdKeyCount--
