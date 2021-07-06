@@ -327,6 +327,9 @@ func (s *Syncer) syncKeyRecursive(key string) {
 }
 
 func (s *Syncer) syncKey(key string) {
+	if s.shouldExclude(key) {
+		return
+	}
 	log.Debugw("sync key",
 		"key", key,
 	)
