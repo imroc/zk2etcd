@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-IMAGE := imroc/zk2etcd:1.0.0
+IMAGE := imroc/zk2etcd:1.0.1
 
 .PHONY: build_docker
 build_docker:
@@ -11,11 +11,11 @@ push:
 
 .PHONY: sync
 sync:
-	go run cmd/zk2etcd/*.go sync --zookeeper-servers zookeeper:2181 --zookeeper-exclude-prefix /dubbo/config,/roc/test --zookeeper-prefix /dubbo,/roc --etcd-servers etcd:2379 --log-level info --fullsync-interval 1m --redis-server redis.douyu:6379
+	go run cmd/zk2etcd/*.go sync --zookeeper-servers zookeeper:2181 --zookeeper-exclude-prefix /dubbo/config,/roc/test --zookeeper-prefix /dubbo,/roc --etcd-servers etcd:2379 --log-level info --fullsync-interval 1m
 
 .PHONY: diff
 diff:
-	go run cmd/zk2etcd/*.go diff --zookeeper-servers zookeeper:2181 --zookeeper-exclude-prefix /dubbo/config,/roc/test --zookeeper-prefix /dubbo,/roc --etcd-servers etcd:2379 --log-level info --redis-server redis.douyu:6379 --concurrent 50
+	go run cmd/zk2etcd/*.go diff --zookeeper-servers zookeeper:2181 --zookeeper-exclude-prefix /dubbo/config,/roc/test --zookeeper-prefix /dubbo,/roc --etcd-servers etcd:2379 --log-level info --concurrent 50
 
 .PHONY: genzk
 genzk:
