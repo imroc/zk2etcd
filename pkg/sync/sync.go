@@ -75,8 +75,11 @@ func (s *Syncer) FullSync() {
 
 	log.Info("start full sync fix")
 	missedCount, extraCount := d.Fix()
-	log.Info("complete full sync fix")
 	cost := time.Since(before)
+	log.Infow("complete full sync fix",
+		"put", missedCount,
+		"delete", extraCount,
+	)
 	log.Infow("full sync completed",
 		"cost", cost.String(),
 	)
@@ -125,7 +128,9 @@ func (s *Syncer) Run() {
 	s.FullSync()
 
 	// 定期全量同步
-	s.StartFullSyncInterval()
+	if s.fullSyncInterval > 0 {
+		go s.StartFullSyncInterval()
+	}
 
 	// 继续同步增量
 	s.SyncIncremental()
@@ -133,14 +138,21 @@ func (s *Syncer) Run() {
 }
 
 func (s *Syncer) StartFullSyncInterval() {
-	if s.fullSyncInterval <= 0 {
-		return
-	}
-	go func() {
-		for range time.Tick(s.fullSyncInterval) {
+	timeChan := time.After(s.fullSyncInterval)
+	lastTime := time.Now()
+	for {
+		select {
+		case <-timeChan:
 			s.FullSync()
+			past := time.Since(lastTime)
+			lastTime = time.Now()
+			if past < s.fullSyncInterval {
+				timeChan = time.After(s.fullSyncInterval - past)
+			} else {
+				timeChan = time.After(1 * time.Second)
+			}
 		}
-	}()
+	}
 }
 
 func (s *Syncer) removeWatch(key string) {

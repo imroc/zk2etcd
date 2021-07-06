@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/imroc/zk2etcd/pkg/etcd"
 	"github.com/imroc/zk2etcd/pkg/log"
+	"github.com/imroc/zk2etcd/pkg/record"
 	"github.com/imroc/zk2etcd/pkg/zookeeper"
 	"go.uber.org/atomic"
 	"path/filepath"
@@ -103,7 +104,18 @@ func (d *Diff) Recheck() {
 	for key, _ := range d.etcdKeys { // 如果重新check仍然是多余的key，才认为是多余的key
 		_, existInEtcd := etcd.Get(key)
 		if existInEtcd {
-			etcdKeys[key] = true
+			_, exist, err := record.Get(key)
+			if exist { // 此 key 是 zk2etcd 之前写入的，才认为是多余的 key，允许删除
+				etcdKeys[key] = true
+			} else {
+				d.etcdKeyCount--
+				if err != nil {
+					log.Errorw("redis get failed",
+						"key", key,
+						"error", err.Error(),
+					)
+				}
+			}
 		} else {
 			d.etcdKeyCount--
 		}
@@ -113,11 +125,6 @@ func (d *Diff) Recheck() {
 	missed := []string{}
 	for _, key := range d.missed { // 如果重新check仍然是缺失的key，才认为是缺失的key
 		_, existInEtcd := etcd.Get(key)
-		//log.Infow("etcd get value",
-		//	"key", key,
-		//	"value", value,
-		//	"existInEtcd", existInEtcd,
-		//)
 		if existInEtcd {
 			d.etcdKeyCount++
 		} else {

@@ -11,11 +11,11 @@ push:
 
 .PHONY: sync
 sync:
-	go run cmd/zk2etcd/*.go sync --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level info --fullsync-interval 10m
+	go run cmd/zk2etcd/*.go sync --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level info --fullsync-interval 1m --redis-server redis.douyu:6379
 
 .PHONY: diff
 diff:
-	go run cmd/zk2etcd/*.go diff --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level info --concurrent 50
+	go run cmd/zk2etcd/*.go diff --zookeeper-servers zookeeper:2181 --zookeeper-prefix /dubbo --etcd-servers etcd:2379 --log-level info --redis-server redis.douyu:6379 --concurrent 50
 
 .PHONY: genzk
 genzk:

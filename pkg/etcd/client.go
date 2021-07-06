@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"github.com/imroc/zk2etcd/pkg/log"
+	"github.com/imroc/zk2etcd/pkg/record"
 	"github.com/imroc/zk2etcd/pkg/util/try"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -99,18 +100,26 @@ func (c *Client) do(fn func() bool) {
 	try.Do(fn, 3, time.Second)
 }
 
-func Put(key, value string) {
-	client.Put(key, value)
+func Put(key, value string) error {
+	return client.Put(key, value)
 }
 
-func (c *Client) Put(key, value string) {
+func (c *Client) Put(key, value string) (err error) {
 	c.do(func() bool {
-		err := c.put(key, value)
+		err = c.put(key, value)
 		if err != nil {
 			return false
 		}
+		err = record.Put(key, value)
+		if err != nil {
+			log.Errorw("redis put error",
+				"key", key,
+				"error", err.Error(),
+			)
+		}
 		return true
 	})
+	return
 }
 
 func (c *Client) delete(key string) error {
@@ -145,6 +154,13 @@ func (c *Client) Delete(key string) bool {
 			return false
 		}
 		ok = true
+		err = record.Delete(key) // 同时清除sqlite中的记录
+		if err != nil {
+			log.Errorw("record delete error",
+				"key", key,
+				"error", err.Error(),
+			)
+		}
 		return true
 	})
 	return ok
