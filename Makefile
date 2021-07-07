@@ -15,7 +15,7 @@ sync:
 
 .PHONY: diff
 diff:
-	go run cmd/zk2etcd/*.go diff --zookeeper-servers zookeeper:2181 --zookeeper-exclude-prefix /dubbo/config,/roc/test --zookeeper-prefix /dubbo,/roc --etcd-servers etcd:2379 --log-level info --concurrent 50
+	go run cmd/zk2etcd/*.go diff --zookeeper-servers zookeeper:2181 --zookeeper-exclude-prefix /dubbo/config,/roc/test --zookeeper-prefix /dubbo,/roc --etcd-servers etcd:2379 --log-level info --concurrent 50 --max-round 3
 
 .PHONY: genzk
 genzk:

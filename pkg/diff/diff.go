@@ -99,7 +99,7 @@ func (d *Diff) handleKey(key string) {
 }
 
 // 对照结果重新 check 一遍，避免 diff 期间频繁变更，递归查询结果与实际不一致
-func (d *Diff) Recheck() {
+func (d *Diff) Recheck() (empty bool) {
 	etcdKeys := make(map[string]bool)
 	for key, _ := range d.etcdKeys { // 如果重新check仍然是多余的key，才认为是多余的key
 		_, existInEtcd := etcd.Get(key)
@@ -137,9 +137,13 @@ func (d *Diff) Recheck() {
 		}
 	}
 	d.missed = missed
+	if len(etcdKeys) == 0 && len(d.missed) == 0 {
+		empty = true
+	}
+	return
 }
 
-func (d *Diff) Run() {
+func (d *Diff) Run() bool {
 	d.starDiffWorkers()
 	var wg sync.WaitGroup
 	before := time.Now()
@@ -168,8 +172,7 @@ func (d *Diff) Run() {
 	d.workerWg.Wait()
 	close(d.stopChan)
 
-	d.Recheck() // 拿着重新check一遍，避免频繁变更导致结果不一致
-
+	return d.Recheck() // 拿着重新check一遍，避免频繁变更导致结果不一致
 }
 
 func (d *Diff) conDo(cocurrent int, keys []string, doFunc func(string)) {
