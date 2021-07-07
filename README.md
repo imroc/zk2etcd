@@ -18,6 +18,41 @@ zk2etcd 是一款同步 zookeeper 数据到 etcd 的工具
 
 参考 [CHANGELOG](CHANGELOG.md)
 
+## 核心原理与方案
+
+### 与其它同步工具共存
+
+当其它同步工具 (比如etcd同步工具) 也在 etcd 的相同目录下进行同步时，如何保证不干扰 (不勿删其它工具写入的 key) ?
+
+zk2etcd 引入 redis 存储，记录本工具向 etcd 写入过的 key，在同步时如果要删除 etcd 中的数据，先判断一下该 key 是否为本工具写入，如果不是就忽略，避免勿删其它工具写入的 key。
+
+### 增量同步
+
+`zk2etcd sync` 运行期间会 watch zookeeper 的数据变更，并将其同步到 etcd 中，原理图:
+
+![](docs/zk2etcd-incremental-sync.jpg)
+
+一些技术难点与实现细节:
+* 关于 watch: zookeeper 存储是树状结构，所以需要通过递归的 list watch children 遍历所有节点才能实现 watch 所有数据的变化。
+* 关于新增: 在没有提前知道完整 key 的情况下，zookeeper 无法感知新增事件，只能收到 ChildrenChanged 事件，zk2etcd 在收到  ChildrenChanged 事件后拿到所有 children 并与 etcd 中数据进行计算对比，得出哪个 key 是新增的，并将其 put 到 etcd 中。
+* 关于删除: zookeeper 的 list children watch 可以收到本节点被删除的事件，由于 zk2etcd 通过递归对所有节点进行了 list children watch，可以感知到所有节点的删除的事件，当收到后会同步删除 etcd 中的数据。
+* 每次对 etcd 进行增删时也会同步增删 redis 中的数据，以便全量同步发生删除时判断 key 是否为本工具写入。
+* 由于 zookeeper 的 watch 是一次性的，所以每次收到事件后又必须重新 watch，两次 watch 之间理论上是可能丢失件的，这也是 zookeeper 本身 watch 机制的缺陷。
+* 由于 zookeeper 是树状结构，而 etcd v3 是扁平结构，etcd 无法像 zookeeper 一样 list children，也就无法取到某个目录下的子节点，只能按照 prefix 来 list 所有 key，所以无法对比出某个目录下，zk 中没有，etcd 中有的情况。当 zookeeper 的某个 delete 事件丢失后，只能依赖全量同步来 fix。
+
+### diff 与全量同步
+
+`zk2etcd diff` 可以对比出 zookeeper 与 etcd 中数据中的数据差异，以便观察同步一致性的情况，原理图:
+
+![](docs/zk2etcd-diff.jpg)
+
+* 通过拉取 zookeeper 与 etcd 中的全量数据进行对比，查出 etcd 中哪些 key 是多余的(应该删除)，哪些是缺失的(应该补齐)。
+* 判断多余 key 会查 redis，判断多余的 key 是否为本工具写入，如果不是则将其移出 (忽略该 key)，认为它不是多余的。
+
+`zk2etcd diff` 带上 `--fix` 则表示进行手动全量同步一次，即拿到 diff 结果，删除 etcd 中多余的 key，补齐缺失的 key。
+
+`zk2etcd sync` 在启动时会全量同步一次，然后会周期性全量同步一次来 fix 掉 zookeeper 与 etcd 中数据存在的一些差异。
+
 ## 用法
 
 zk2etcd 主要提供 `sync` 和 `diff` 两个核心的子命令:
