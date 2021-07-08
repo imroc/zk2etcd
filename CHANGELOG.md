@@ -1,5 +1,9 @@
 # zk2etcd 变更历史
 
+## v1.0.3 (2021.07.08)
+
+* 支持配置 redis 密码。
+
 ## v1.0.2 (2021.07.07)
 
 * 支持多轮 diff，`--max-round` 指定最大几轮 diff，`--round-interval` 指定每轮 diff 间隔时长。
