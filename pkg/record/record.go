@@ -13,11 +13,12 @@ type Record struct {
 	ctx    context.Context
 }
 
-func New(redisServer, redisPassword string) *Record {
+func New(redisServer, redisUsername, redisPassword string) *Record {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     redisServer,
 		Password: redisPassword, // no password set
-		DB:       0,             // use default DB
+		Username: redisUsername,
+		DB:       0, // use default DB
 	})
 	return &Record{
 		client: rdb,
