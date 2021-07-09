@@ -70,6 +70,7 @@ Usage:
 
 Flags:
       --concurrent uint                   the concurreny of syncing worker (default 50)
+      --enable-event-log                  enable event log
       --etcd-cacert string                verify certificates of TLS-enabled secure servers using this CA bundle
       --etcd-cert string                  identify secure client using this TLS certificate file
       --etcd-key string                   identify secure client using this TLS key file
@@ -77,14 +78,16 @@ Flags:
       --fullsync-interval duration        the interval of full sync, set to 0s to disable it (default 5m0s)
   -h, --help                              help for sync
       --log-level string                  log output level，possible values: 'debug', 'info', 'warn', 'error', 'panic', 'fatal' (default "info")
-      --redis-server string               redis server address (default "127.0.0.1:6379")
+      --redis-password string             redis password
+      --redis-server string               redis server address
+      --redis-username string             redis username
       --zookeeper-exclude-prefix string   comma-separated list of zookeeper path prefix to be excluded (default "/dubbo/config")
       --zookeeper-prefix string           comma-separated list of zookeeper path prefix to be synced (default "/dubbo")
       --zookeeper-servers string          comma-separated list of zookeeper servers address
+
 ```
 
 ```bash
-$ zk2etcd diff --help
 compare keys between zk and etcd
 
 Usage:
@@ -92,6 +95,7 @@ Usage:
 
 Flags:
       --concurrent uint                   the concurreny of syncing worker (default 50)
+      --enable-event-log                  enable event log
       --etcd-cacert string                verify certificates of TLS-enabled secure servers using this CA bundle
       --etcd-cert string                  identify secure client using this TLS certificate file
       --etcd-key string                   identify secure client using this TLS key file
@@ -99,7 +103,11 @@ Flags:
       --fix                               set to true will fix the data diff between zk and etcd
   -h, --help                              help for diff
       --log-level string                  log output level，possible values: 'debug', 'info', 'warn', 'error', 'panic', 'fatal' (default "info")
-      --redis-server string               redis server address (default "127.0.0.1:6379")
+      --max-round int                     max diff round, must >= 1 (default 1)
+      --redis-password string             redis password
+      --redis-server string               redis server address
+      --redis-username string             redis username
+      --round-interval duration           the interval of every diff round (default 3s)
       --zookeeper-exclude-prefix string   comma-separated list of zookeeper path prefix to be excluded (default "/dubbo/config")
       --zookeeper-prefix string           comma-separated list of zookeeper path prefix to be synced (default "/dubbo")
       --zookeeper-servers string          comma-separated list of zookeeper servers address
@@ -110,11 +118,13 @@ sync 启动示例:
 ```bash
 $ zk2etcd sync
   --redis-server=redis.test.svc.cluster.local:6379 \
+  --redis-password=hello:world \
   --etcd-servers=etcd.test.svc.cluster.local:2379 \
   --zookeeper-servers=zookeeper.test.svc.cluster.local:2181 \
   --zookeeper-exclude-prefix=/dubbo/config,/roc/test \
   --zookeeper-prefix=/dubbo,/roc \
   --log-level=info \
+  --enable-event-log \
   --fullsync-interval=5m \
   --concurrent=50
 ```
@@ -131,6 +141,7 @@ $ zk2etcd sync
 ```bash
 $ zk2etcd diff
   --redis-server=redis.test.svc.cluster.local:6379 \
+  --redis-password=hello:world \
   --etcd-servers=etcd.test.svc.cluster.local:2379 \
   --zookeeper-servers=zookeeper.test.svc.cluster.local:2181 \
   --zookeeper-exclude-prefix=/dubbo/config,/roc/test \
@@ -152,6 +163,7 @@ zk2etcd 每个版本都有对应的容器镜像 (`imroc/zk2etcd`)，tag 与 版�
 ```bash
 $ docker run -d imroc/zk2etcd zk2etcd sync \
   --redis-server=redis.test.svc.cluster.local:6379 \
+  --redis-password=hello:world \
   --etcd-servers=etcd.test.svc.cluster.local:2379 \
   --zookeeper-servers=zookeeper.test.svc.cluster.local:2181 \
   --zookeeper-exclude-prefix=/dubbo/config,/roc/test \
@@ -164,6 +176,7 @@ $ docker run -d imroc/zk2etcd zk2etcd sync \
 ```bash
 $ docker run -it imroc/zk2etcd zk2etcd diff \
   --redis-server=redis.test.svc.cluster.local:6379 \
+  --redis-password=hello:world \
   --etcd-servers=etcd.test.svc.cluster.local:2379 \
   --zookeeper-servers=zookeeper.test.svc.cluster.local:2181 \
   --zookeeper-exclude-prefix=/dubbo/config,/roc/test \
@@ -192,7 +205,7 @@ spec:
     spec:
       containers:
       - name: debug
-        image: imroc/zk2etcd:1.0.4
+        image: imroc/zk2etcd:1.1.0
         volumeMounts:
         - mountPath: /certs
           name: etcd-certs
@@ -200,6 +213,8 @@ spec:
         - zk2etcd
         - sync
         - '--redis-server=redis.test.svc.cluster.local:6379'
+        - '--redis-password=hello:world'
+        - '--enable-event-log'
         - '--etcd-servers=etcd.test.svc.cluster.local:2379'
         - '--zookeeper-servers=zookeeper.test.svc.cluster.local:2181'
         - '--zookeeper-exclude-prefix=/dubbo/config,/roc/test'

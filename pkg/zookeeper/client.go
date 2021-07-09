@@ -82,7 +82,9 @@ func (c *Client) ReConnect() {
 	if c.connectCount != count {
 		return
 	}
+	log.Info("zk try to reconnect")
 	c.watchConn = c.connectUntilSuccess()
+	log.Info("zk connected")
 	c.connectCount++
 }
 
@@ -211,13 +213,13 @@ func (c *Client) Get(key string) (value string, exist bool) {
 //	}
 //}
 
-func List(key string) (children []string) {
-	return client.List(key)
+func List(key string, e *log.Event) (children []string) {
+	return client.List(key, e)
 }
 
-func (c *Client) List(key string) (children []string) {
+func (c *Client) List(key string, e *log.Event) (children []string) {
 	c.dozk("list", func(conn *zk.Conn) (ok bool, err error) {
-		log.Debugw("zk list",
+		e.Record("zk list",
 			"key", key,
 		)
 		children, _, err = conn.Children(key)
@@ -227,7 +229,11 @@ func (c *Client) List(key string) (children []string) {
 			} else {
 				log.Warnw("zk list failed",
 					"key", key,
-					"error", err,
+					"error", err.Error(),
+				)
+				e.Record("zk list failed",
+					"key", key,
+					"error", err.Error(),
 				)
 			}
 		} else {
@@ -238,13 +244,13 @@ func (c *Client) List(key string) (children []string) {
 	return
 }
 
-func ListW(key string) (children []string, ch <-chan zk.Event) {
-	return client.ListW(key)
+func ListW(key string, e *log.Event) (children []string, ch <-chan zk.Event) {
+	return client.ListW(key, e)
 }
 
-func (c *Client) ListW(key string) (children []string, ch <-chan zk.Event) {
+func (c *Client) ListW(key string, e *log.Event) (children []string, ch <-chan zk.Event) {
 	c.dozk("listwatch", func(conn *zk.Conn) (ok bool, err error) {
-		log.Debugw("zk list watch",
+		e.Record("zk list watch",
 			"key", key,
 		)
 		children, _, ch, err = conn.ChildrenW(key)
@@ -253,6 +259,10 @@ func (c *Client) ListW(key string) (children []string, ch <-chan zk.Event) {
 				ok = true
 			} else {
 				log.Warnw("zk list watch failed",
+					"key", key,
+					"error", err,
+				)
+				e.Record("zk list watch failed",
 					"key", key,
 					"error", err,
 				)

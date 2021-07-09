@@ -77,10 +77,6 @@ func (c *Client) init() error {
 
 func (c *Client) put(key, value string) error {
 	before := time.Now()
-	log.Infow("etcd put",
-		"key", key,
-		"value", value,
-	)
 	_, err := c.Client.Put(timeoutContext(), key, value)
 	cost := time.Since(before)
 	status := "success"
@@ -100,19 +96,37 @@ func (c *Client) do(fn func() bool) {
 	try.Do(fn, 3, time.Second)
 }
 
-func Put(key, value string) error {
-	return client.Put(key, value)
+func Put(key, value string, e *log.Event) error {
+	return client.Put(key, value, e)
 }
 
-func (c *Client) Put(key, value string) (err error) {
+func (c *Client) Put(key, value string, e *log.Event) (err error) {
 	c.do(func() bool {
+		e.Record("etcd put",
+			"key", key,
+			"value", value,
+		)
 		err = c.put(key, value)
 		if err != nil {
+			e.Record("etcd put failed",
+				"key", key,
+				"value", value,
+				"error", err.Error(),
+			)
 			return false
 		}
 		if record.Enable {
+			e.Record("redis put",
+				"key", key,
+				"value", value,
+			)
 			err = record.Put(key, value)
 			if err != nil {
+				e.Record("redis put failed",
+					"key", key,
+					"value", value,
+					"error", err.Error(),
+				)
 				log.Errorw("redis put error",
 					"key", key,
 					"error", err.Error(),
@@ -144,21 +158,35 @@ func (c *Client) delete(key string) error {
 	return err
 }
 
-func Delete(key string) bool {
-	return client.Delete(key)
+func Delete(key string, e *log.Event) bool {
+	return client.Delete(key, e)
 }
 
-func (c *Client) Delete(key string) bool {
+func (c *Client) Delete(key string, e *log.Event) bool {
 	ok := false
 	c.do(func() bool {
+		e.Record("etcd delete",
+			"key", key,
+		)
 		err := c.delete(key)
 		if err != nil {
+			e.Record("etcd failed",
+				"key", key,
+				"error", err.Error(),
+			)
 			return false
 		}
 		ok = true
 		if record.Enable {
+			e.Record("redis delete",
+				"key", key,
+			)
 			err = record.Delete(key) // 同时清除sqlite中的记录
 			if err != nil {
+				e.Record("redis delete failed",
+					"key", key,
+					"error", err.Error(),
+				)
 				log.Errorw("record delete error",
 					"key", key,
 					"error", err.Error(),

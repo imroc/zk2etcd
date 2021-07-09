@@ -3,7 +3,6 @@ package record
 import (
 	"context"
 	"github.com/go-redis/redis/v8"
-	"github.com/imroc/zk2etcd/pkg/log"
 )
 
 var defaultRecord *Record
@@ -39,18 +38,11 @@ func Get(key string) (value string, exist bool, err error) {
 }
 
 func Delete(key string) (err error) {
-	log.Infow("redis delete",
-		"key", key,
-	)
 	err = defaultRecord.client.Del(defaultRecord.ctx, key).Err()
 	return
 }
 
 func Put(key, value string) (err error) {
-	log.Infow("redis put",
-		"key", key,
-		"value", value,
-	)
 	err = defaultRecord.client.Set(defaultRecord.ctx, key, value, 0).Err()
 	return
 }

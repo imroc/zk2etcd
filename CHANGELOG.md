@@ -1,5 +1,10 @@
 # zk2etcd 变更历史
 
+## v1.1.0 (2021.07.09)
+
+* 支持 event log，使用 `--enable-event-log` 开启 (带 `"type": "event"` 字段)。
+* event log 将相关联的日志使用相同 traceId 串起来，方便运维与问题排查。
+
 ## v1.0.4 (2021.07.08)
 
 * 支持自定义 redis 用户名。

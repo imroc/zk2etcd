@@ -49,7 +49,7 @@ func (s *Syncer) startWorker() {
 		go func() {
 			for {
 				key := <-s.keysToSync
-				s.syncKey(key)
+				s.syncKey(key, log.NewEvent())
 			}
 		}()
 	}
@@ -64,6 +64,8 @@ func (s *Syncer) SyncIncremental() {
 }
 
 func (s *Syncer) FullSync() {
+	e := log.NewEvent()
+	e.Record("start full sync")
 	log.Info("start full sync")
 	before := time.Now()
 
@@ -74,7 +76,7 @@ func (s *Syncer) FullSync() {
 	log.Info("complete full sync diff")
 
 	log.Info("start full sync fix")
-	missedCount, extraCount := d.Fix()
+	missedCount, extraCount := d.Fix(e)
 	cost := time.Since(before)
 	log.Infow("complete full sync fix",
 		"put", missedCount,
@@ -155,7 +157,7 @@ func (s *Syncer) StartFullSyncInterval() {
 	}
 }
 
-func (s *Syncer) removeWatch(key string) {
+func (s *Syncer) removeWatch(key string, e *log.Event) {
 	s.watcherLock.Lock()
 	_, ok := s.watcher[key]
 	if !ok {
@@ -167,9 +169,12 @@ func (s *Syncer) removeWatch(key string) {
 	}
 	delete(s.watcher, key)
 	s.watcherLock.Unlock()
+	e.Record("stop watch",
+		"key", key,
+	)
 }
 
-func (s *Syncer) handleEvent(event zk.Event) bool {
+func (s *Syncer) handleEvent(event zk.Event, e *log.Event) bool {
 	log.Infow("handle event",
 		"type", event.Type.String(),
 		"state", event.State.String(),
@@ -178,8 +183,7 @@ func (s *Syncer) handleEvent(event zk.Event) bool {
 	)
 	switch event.Type {
 	case zk.EventNodeDeleted:
-		etcd.Delete(event.Path)
-		s.removeWatch(event.Path)
+		etcd.Delete(event.Path, e)
 		return false
 	case zk.EventNotWatching:
 		log.Warnw("received zk not watching event",
@@ -212,7 +216,7 @@ const (
 	debounceMax = 10 * time.Second
 )
 
-func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
+func (s *Syncer) watch(key string, stop <-chan struct{}, e *log.Event) []string {
 	s.watcherLock.Lock()
 	if _, ok := s.watcher[key]; ok {
 		s.watcherLock.Unlock()
@@ -221,11 +225,7 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 	s.watcher[key] = struct{}{}
 	s.watcherLock.Unlock()
 
-	log.Debugw("watch key",
-		"key", key,
-	)
-
-	children, ch := zookeeper.ListW(key)
+	children, ch := zookeeper.ListW(key, e)
 
 	if ch == nil {
 		log.Warnw("key not exist",
@@ -242,6 +242,12 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 		for {
 			select {
 			case event := <-ch:
+				e := log.NewEvent()
+				e.Record("received zk event",
+					"eventType", event.Type.String(),
+					"path", event.Path,
+					"state", event.State.String(),
+				)
 				if event.Type == zk.EventNodeChildrenChanged { // 短时间内频繁变更，避免频繁同步
 					lastChildrenChangedTime = time.Now()
 					if debouncedEvents == 0 {
@@ -250,15 +256,16 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 					debouncedEvents++
 					timeChan = time.After(debounceAfter)
 				} else {
-					shouldContinue := s.handleEvent(event)
+					shouldContinue := s.handleEvent(event, e)
 					if !shouldContinue {
+						s.removeWatch(key, e)
 						return
 					}
 				}
-				children, ch = zookeeper.ListW(key)
+				children, ch = zookeeper.ListW(key, e)
 				if ch == nil { // rmr 清空场景，当收到 children changed 事件时，list watch 会失败
-					etcd.Delete(key)
-					s.removeWatch(key)
+					etcd.Delete(key, e)
+					s.removeWatch(key, e)
 					return
 				}
 			case <-timeChan:
@@ -266,10 +273,12 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 				quietTime := time.Since(lastChildrenChangedTime)
 				if eventDelay >= debounceMax || quietTime >= debounceAfter {
 					if debouncedEvents > 0 { // 开始同步
-						s.syncChildren(key, stop)
+						e := log.NewEvent()
+						s.syncChildren(key, stop, e)
 						if !zookeeper.Exists(key) {
-							etcd.Delete(key)
-							s.removeWatch((key))
+							etcd.Delete(key, e)
+							s.removeWatch(key, e)
+							return
 						}
 						debouncedEvents = 0
 					}
@@ -277,6 +286,7 @@ func (s *Syncer) watch(key string, stop <-chan struct{}) []string {
 					timeChan = time.After(debounceAfter - quietTime)
 				}
 			case <-stop:
+				s.removeWatch(key, e)
 				return
 			}
 		}
@@ -291,7 +301,7 @@ func (s *Syncer) syncWatchRecursive(key string, stop <-chan struct{}) {
 	}
 
 	// watch children
-	children := s.watch(key, stop)
+	children := s.watch(key, stop, nil)
 
 	// watch children recursively
 	for _, child := range children {
@@ -318,7 +328,7 @@ func (s *Syncer) syncKeyRecursive(key string) {
 	}
 
 	s.keysToSync <- key
-	children := zookeeper.List(key)
+	children := zookeeper.List(key, nil)
 
 	for _, child := range children {
 		fullPath := filepath.Join(key, child)
@@ -326,11 +336,11 @@ func (s *Syncer) syncKeyRecursive(key string) {
 	}
 }
 
-func (s *Syncer) syncKey(key string) {
+func (s *Syncer) syncKey(key string, e *log.Event) {
 	if s.shouldExclude(key) {
 		return
 	}
-	log.Debugw("sync key",
+	e.Record("sync key",
 		"key", key,
 	)
 	defer s.keyCountSynced.Inc()
@@ -338,26 +348,26 @@ func (s *Syncer) syncKey(key string) {
 	etcdValue, existInEtcd := etcd.Get(key)
 	switch {
 	case existInZK && !existInEtcd: // etcd 中缺失，补齐
-		log.Debugw("key not exist in etcd, put in etcd",
+		e.Record("key not exist in etcd, put in etcd",
 			"key", key,
 			"value", zkValue,
 		)
-		etcd.Put(key, zkValue)
+		etcd.Put(key, zkValue, e)
 		s.syncWatchRecursive(key, s.stop) // 可能是新增的，确保 watch 下
 	case !existInZK && existInEtcd: // etcd 中多出 key，删除，一般不会发生
-		log.Debugw("key not exist in zk, remove in etcd",
+		e.Record("key not exist in zk, remove in etcd",
 			"key", key,
 		)
-		etcd.Delete(key)
+		etcd.Delete(key, e)
 	case existInZK && existInEtcd && (zkValue != etcdValue): // key 都存在，但 value 不同，纠正 etcd 中的 value
-		log.Debugw("value differs",
+		e.Record("value differs, override value in etcd",
 			"key", key,
 			"zkValue", zkValue,
 			"etcdValue", etcdValue,
 		)
-		etcd.Put(key, zkValue)
+		etcd.Put(key, zkValue, e)
 	default:
-		log.Debugw("sync ignore",
+		e.Record("sync ignore",
 			"key", key,
 			"existInZK", existInZK,
 			"existInEtcd", existInEtcd,
@@ -367,14 +377,17 @@ func (s *Syncer) syncKey(key string) {
 	}
 }
 
-func (s *Syncer) syncChildren(key string, stop <-chan struct{}) {
+func (s *Syncer) syncChildren(key string, stop <-chan struct{}, e *log.Event) {
 	log.Infow("sync children",
 		"key", key,
 	)
-	children := zookeeper.List(key)
+	e.Record("sync children",
+		"key", key,
+	)
+	children := zookeeper.List(key, e)
 	for _, child := range children {
 		fullPath := filepath.Join(key, child)
-		s.watch(key, stop)
-		s.syncKey(fullPath)
+		s.watch(key, stop, e)
+		s.syncKey(fullPath, e)
 	}
 }

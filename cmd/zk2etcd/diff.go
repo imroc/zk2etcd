@@ -44,7 +44,7 @@ func newDiffCmd(args []string) *cobra.Command {
 				empty = d.Recheck()
 			}
 			if fix {
-				missedCount, extraCount := d.Fix()
+				missedCount, extraCount := d.Fix(nil)
 				fmt.Println("put missed count: ", missedCount)
 				fmt.Println("delete extra count: ", extraCount)
 				d.Recheck()

@@ -65,7 +65,7 @@ func (d *Diff) starDiffWorkers() {
 }
 
 func (d *Diff) handleChildren(key string) {
-	children := zookeeper.List(key)
+	children := zookeeper.List(key, nil)
 	for _, child := range children {
 		newKey := filepath.Join(key, child)
 		d.handleKeyRecursive(newKey)
@@ -77,7 +77,7 @@ func (d *Diff) handleKeyRecursive(key string) {
 	defer d.workerWg.Done()
 
 	d.keys <- key
-	children := zookeeper.List(key)
+	children := zookeeper.List(key, nil)
 	for _, child := range children {
 		newKey := filepath.Join(key, child)
 		d.handleKeyRecursive(newKey)
@@ -218,12 +218,12 @@ func (d *Diff) getExtraKeys() []string {
 	return extra
 }
 
-func (d *Diff) Fix() (missedCount, extraCount int) {
+func (d *Diff) Fix(e *log.Event) (missedCount, extraCount int) {
 	// 删除 etcd 多余的 key
 	extraKeys := d.getExtraKeys()
 	extraCount = len(extraKeys)
 	d.conDo(int(d.concurrency), extraKeys, func(key string) {
-		etcd.Delete(key)
+		etcd.Delete(key, e)
 	})
 
 	// 补齐 etcd 缺失的 key
@@ -236,7 +236,7 @@ func (d *Diff) Fix() (missedCount, extraCount int) {
 			)
 			return
 		}
-		etcd.Put(key, value)
+		etcd.Put(key, value, e)
 	})
 	return
 }

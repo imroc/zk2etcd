@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: zk2etcd
-        image: imroc/zk2etcd:1.0.4
+        image: imroc/zk2etcd:1.1.0
         imagePullPolicy: Always
         command: [ "/bin/zk2etcd" ]
         args:
@@ -30,3 +30,6 @@ spec:
         - --etcd-cacert=/certs/ca.crt
         - --etcd-cert=/certs/cert.pem
         - --etcd-key=/certs/key.pem
+        - --enable-event-log
+        - --redis-server=redis:6379
+        - --redis-password=hello:world
