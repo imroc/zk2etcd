@@ -106,6 +106,7 @@ func (s *Syncer) ensureClients() {
 
 func (s *Syncer) startHttpServer() {
 	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/log", log.LogLevelHandler)
 	err := http.ListenAndServe(":80", nil)
 	if err != nil {
 		log.Fatalw("http listen failed",
