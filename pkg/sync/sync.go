@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/atomic"
 	"net/http"
+	_ "net/http/pprof"
 	"path/filepath"
 	"strings"
 	"sync"
