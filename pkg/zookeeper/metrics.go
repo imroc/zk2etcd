@@ -18,9 +18,25 @@ var (
 		},
 		[]string{"op", "status"},
 	)
+	ZKConn = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zk2etcd_zk_conn_total",
+			Help: "Number of the zk connection",
+		},
+		[]string{},
+	)
+	ZKConnect = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "zk2etcd_zk_connect_total",
+			Help: "Number of the zk connect times",
+		},
+		[]string{},
+	)
 )
 
 func init() {
 	prometheus.MustRegister(ZKOp)
 	prometheus.MustRegister(ZKOpDuration)
+	prometheus.MustRegister(ZKConn)
+	prometheus.MustRegister(ZKConnect)
 }

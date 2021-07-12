@@ -276,6 +276,7 @@ func (c *Client) ListW(key string, e *log.Event) (children []string, ch <-chan z
 }
 
 func (c *Client) connect() (conn *zk.Conn, err error) {
+	ZKConnect.WithLabelValues().Inc()
 	log.Debugw("zk connect",
 		"servers", c.servers,
 	)
@@ -284,6 +285,7 @@ func (c *Client) connect() (conn *zk.Conn, err error) {
 }
 
 func (c *Client) connectUntilSuccess() *zk.Conn {
+	ZKConn.WithLabelValues().Inc()
 	conn, err := c.connect()
 	for err != nil { // 如果连接失败，一直重试，直到成功
 		log.Errorw("failed to connect to zooKeeper, retrying...",
