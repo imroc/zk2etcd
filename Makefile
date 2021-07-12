@@ -33,3 +33,7 @@ lint:
 .PHONY: clean
 clean:
 	rm ./bin/zk2etcd
+
+.PHONY: dt
+dt:
+	docker buildx build --push --platform=linux/amd64 . -t cr.imroc.cc/test/zk2etcd:latest
