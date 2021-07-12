@@ -1,4 +1,8 @@
 vendor/
 output/
 .idea/
+*.iml
 bin/
+
+# OSX trash
+.DS_Store
