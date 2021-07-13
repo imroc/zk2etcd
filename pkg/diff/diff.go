@@ -55,6 +55,7 @@ func (d *Diff) starDiffWorkers() {
 				select {
 				case key := <-d.keys:
 					d.handleKey(key)
+					d.workerWg.Done()
 				case <-d.stopChan:
 					log.Debug("stop diff worker")
 					return
@@ -64,18 +65,8 @@ func (d *Diff) starDiffWorkers() {
 	}
 }
 
-func (d *Diff) handleChildren(key string) {
-	children := zookeeper.List(key, nil)
-	for _, child := range children {
-		newKey := filepath.Join(key, child)
-		d.handleKeyRecursive(newKey)
-	}
-}
-
 func (d *Diff) handleKeyRecursive(key string) {
 	d.workerWg.Add(1)
-	defer d.workerWg.Done()
-
 	d.keys <- key
 	children := zookeeper.List(key, nil)
 	for _, child := range children {
@@ -168,11 +159,8 @@ func (d *Diff) Run() bool {
 		}
 		d.handleKeyRecursive(prefix)
 	}
-
-	time.Sleep(time.Second)
 	d.workerWg.Wait()
 	close(d.stopChan)
-
 	return d.Recheck() // 拿着重新check一遍，避免频繁变更导致结果不一致
 }
 
