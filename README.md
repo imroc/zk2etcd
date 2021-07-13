@@ -278,7 +278,9 @@ zk2etcd 通过 80 端口 (暂时写死) 暴露 metrics，路径 `/metrics`，包
   * 统计因etcd数据缺失导致的数据补齐操作次数: sum(rate(zk2etcd_fixed_total{type="put"}[1m]))
   * 统计因etcd数据多余导致的数据删除操作次数: sum(rate(zk2etcd_fixed_total{type="delete"}[1m]))
   * 统计全部fix操作: sum(rate(zk2etcd_fixed_total[1m]))
-  
+* zk2etcd_zk_conn_total: zk连接数量
+* zk2etcd_zk_connect_total: zk连接次数
+
 grafana 面板示例:
 
 ![](docs/1.png)
