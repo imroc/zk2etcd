@@ -18,6 +18,7 @@ func GetRootCmd(args []string) *cobra.Command {
 	rootCmd.AddCommand(newSyncCmd(args))
 	rootCmd.AddCommand(newDiffCmd(args))
 	rootCmd.AddCommand(newGenzkCmd(args))
+	rootCmd.AddCommand(newLogCmd(args))
 	rootCmd.AddCommand(newVersionCmd())
 
 	return rootCmd

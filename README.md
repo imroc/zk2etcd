@@ -246,6 +246,13 @@ spec:
     app: zk2etcd
 ```
 
+## API 说明
+
+zk2etcd 提供了几个 HTTP 接口，端口为 80 (暂不支持自定义):
+* `/log`: 用于动态调整日志级别，POST 方法，只接收一个 `level` 参数，自带的 log 子命令封装了此调用，使用示例: `zk2etcd log --level=debug --zk2etcd-addr=http://zk2etcd:80`。
+* `/debug`: golang 的 pprof 接口。使用示例: `go tool pprof -http=:9090 http://zk2etcd.test.svc.cluster.local:80/debug/pprof/heap`
+* `/metrics`: 提供 prometheus 指标。
+
 ## 注意事项
 
 * 若用 k8s 部署，启动参数中若有双引号或其它特殊字符，最外层用单引号括起来，避免 yaml 格式问题导致启动失败，示例: `- '--etcd-key="/certs/key.pem"'`。
@@ -293,4 +300,4 @@ grafana 面板示例:
 * [x] 支持与 etcd 同步工具共存(不勿删其它同步工具写入的数据，需引入外部存储记录状态)
 * [x] 日志更丰富的自定义(如文件存储，事件日志)
 * [x] 日志记录事务id，将一系列操作串起来
-* [ ] 支持动态加载配置(如日志级别)
+* [x] 支持动态加载配置(如日志级别)

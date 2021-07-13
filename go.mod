@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/go-redis/redis/v8 v8.11.0
 	github.com/go-zookeeper/zk v1.0.2
+	github.com/imroc/req v0.3.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/spf13/cobra v1.1.3

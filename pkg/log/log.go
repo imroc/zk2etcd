@@ -10,7 +10,7 @@ type Logger struct {
 	eventLogger *zap.SugaredLogger
 }
 
-var opt *Options
+var defaultOpt *Options
 
 var logger *Logger
 
@@ -22,7 +22,8 @@ func Init(opt *Options) {
 	if opt == nil {
 		return
 	}
-	logger = opt.buildLogger()
+	defaultOpt = opt
+	logger = defaultOpt.buildLogger()
 }
 
 func (l *Logger) NewEvent() *Event {
@@ -34,8 +35,8 @@ func NewEvent() *Event {
 }
 
 func SetLogLevel(level string) {
-	opt.LogLevel = level
-	logger = opt.buildLogger()
+	defaultOpt.LogLevel = level
+	logger = defaultOpt.buildLogger()
 }
 
 func LogLevelHandler(w http.ResponseWriter, r *http.Request) {
