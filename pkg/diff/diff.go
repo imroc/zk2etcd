@@ -148,7 +148,8 @@ func (d *Diff) Run() bool {
 	var wg sync.WaitGroup
 	before := time.Now()
 	for _, prefix := range d.zkPrefix {
-		d.etcdGetAll(prefix, &wg)
+		wg.Add(1)
+		go d.etcdGetAll(prefix, &wg)
 	}
 	wg.Wait()
 	cost := time.Since(before)
@@ -266,7 +267,6 @@ func (d *Diff) shouldExclude(key string) bool {
 }
 
 func (d *Diff) etcdGetAll(key string, wg *sync.WaitGroup) {
-	wg.Add(1)
 	defer wg.Done()
 	keys := etcd.ListAllKeys(key)
 	for _, key := range keys {
