@@ -1,5 +1,14 @@
 # zk2etcd 变更历史
 
+## v1.2.0 (2021.07.13)
+
+* 重新实现 zk 连接池，修复 goroutine/内存 泄漏问题
+* 优化 diff
+* metrics 增加 zk2etcd_zk_conn_total (连接池的zk连接数量)
+* metrics 增加 zk2etcd_zk_connect_total (zk connect 次数)
+* 支持 pprof
+* 增加 /log 的 http api，实现动态调整日志级别
+
 ## v1.1.0 (2021.07.09)
 
 * 支持 event log，使用 `--enable-event-log` 开启 (带 `"type": "event"` 字段)。
