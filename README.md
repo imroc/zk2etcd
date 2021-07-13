@@ -205,7 +205,7 @@ spec:
     spec:
       containers:
       - name: debug
-        image: imroc/zk2etcd:1.1.0
+        image: imroc/zk2etcd:1.2.1
         volumeMounts:
         - mountPath: /certs
           name: etcd-certs
