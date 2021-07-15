@@ -90,12 +90,19 @@ func (d *Diff) handleKey(key string) {
 }
 
 // 对照结果重新 check 一遍，避免 diff 期间频繁变更，递归查询结果与实际不一致
-func (d *Diff) Recheck() (empty bool) {
+func (d *Diff) Recheck(e *log.Event) (empty bool) {
+	e.Record("start recheck")
 	etcdKeys := make(map[string]bool)
 	for key, _ := range d.etcdKeys { // 如果重新check仍然是多余的key，才认为是多余的key
+		e.Record("get extra from etcd",
+			"key", key,
+		)
 		_, existInEtcd := etcd.Get(key)
 		if existInEtcd {
 			if record.Enable {
+				e.Record("get from redis",
+					"key", key,
+				)
 				_, exist, err := record.Get(key)
 				if exist { // 此 key 是 zk2etcd 之前写入的，才认为是多余的 key，允许删除
 					etcdKeys[key] = true
@@ -119,11 +126,13 @@ func (d *Diff) Recheck() (empty bool) {
 
 	missed := []string{}
 	for _, key := range d.missed { // 如果重新check仍然是缺失的key，才认为是缺失的key
+		e.Record("get missed from etcd",
+			"key", key,
+		)
 		_, existInEtcd := etcd.Get(key)
 		if existInEtcd {
 			d.etcdKeyCount++
 		} else {
-			//log.Info("still missing " + key)
 			missed = append(missed, key)
 		}
 	}
@@ -131,13 +140,15 @@ func (d *Diff) Recheck() (empty bool) {
 	if len(etcdKeys) == 0 && len(d.missed) == 0 {
 		empty = true
 	}
+	e.Record("complete recheck")
 	return
 }
 
-func (d *Diff) Run() bool {
+func (d *Diff) Run(e *log.Event) bool {
 	d.starDiffWorkers()
 	var wg sync.WaitGroup
 	before := time.Now()
+	e.Record("start list all in etcd")
 	for _, prefix := range d.zkPrefix {
 		wg.Add(1)
 		go d.etcdGetAll(prefix, &wg)
@@ -145,6 +156,10 @@ func (d *Diff) Run() bool {
 	wg.Wait()
 	cost := time.Since(before)
 	d.etcdKeyCount = len(d.etcdKeys)
+	e.Record("fetched data from etcd",
+		"duration", cost.String(),
+		"count", d.etcdKeyCount,
+	)
 	log.Infow("fetched data from etcd",
 		"duration", cost.String(),
 		"count", d.etcdKeyCount,
@@ -160,8 +175,9 @@ func (d *Diff) Run() bool {
 		d.handleKeyRecursive(prefix)
 	}
 	d.workerWg.Wait()
+	e.Record("finish basic diff")
 	close(d.stopChan)
-	return d.Recheck() // 拿着重新check一遍，避免频繁变更导致结果不一致
+	return d.Recheck(e) // 拿着重新check一遍，避免频繁变更导致结果不一致
 }
 
 func (d *Diff) conDo(cocurrent int, keys []string, doFunc func(string)) {

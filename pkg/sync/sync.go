@@ -73,12 +73,19 @@ func (s *Syncer) FullSync() {
 	d := diff.New(s.zkPrefix, s.zkExcludePrefix, s.concurrency)
 
 	log.Info("start full sync diff")
-	d.Run()
+	e.Record("start full sync diff")
+	d.Run(e)
 	log.Info("complete full sync diff")
+	e.Record("complete full sync diff")
 
 	log.Info("start full sync fix")
+	e.Record("start full sync fix")
 	missedCount, extraCount := d.Fix(e)
 	cost := time.Since(before)
+	e.Record("complete full sync fix",
+		"put", missedCount,
+		"delete", extraCount,
+	)
 	log.Infow("complete full sync fix",
 		"put", missedCount,
 		"delete", extraCount,

@@ -37,17 +37,17 @@ func newDiffCmd(args []string) *cobra.Command {
 			zkPrefixes, zkExcludePrefixes := common.GetAll()
 			d := diff.New(zkPrefixes, zkExcludePrefixes, concurrent)
 			before := time.Now()
-			empty := d.Run()
+			empty := d.Run(nil)
 			for i := 2; !empty && i <= maxRound; i++ {
 				log.Info(fmt.Sprintf("round %d check has extra or missed keys, ready to check round %d", i-1, i))
 				time.Sleep(roundInterval)
-				empty = d.Recheck()
+				empty = d.Recheck(nil)
 			}
 			if fix {
 				missedCount, extraCount := d.Fix(nil)
 				fmt.Println("put missed count: ", missedCount)
 				fmt.Println("delete extra count: ", extraCount)
-				d.Recheck()
+				d.Recheck(nil)
 			}
 			d.PrintSummary()
 			cost := time.Since(before)
