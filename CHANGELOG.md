@@ -1,8 +1,13 @@
 # zk2etcd 变更历史
 
+## v1.2.4 (2021.07.17)
+
+* 重置 fullsync timer (修复 fullsync timer 失效)
+
 ## v1.2.3 (2021.07.16)
 
 * 修复 zk 连接池实现问题 (导致 fullsync 卡住)
+* 优化 fullsync timer
 
 ## v1.2.2 (2021.07.15)
 
