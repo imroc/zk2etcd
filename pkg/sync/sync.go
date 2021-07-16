@@ -154,14 +154,14 @@ func (s *Syncer) StartFullSyncInterval() {
 	for {
 		select {
 		case <-timeChan:
-			s.FullSync()
 			past := time.Since(lastTime)
-			lastTime = time.Now()
 			if past < s.fullSyncInterval {
 				timeChan = time.After(s.fullSyncInterval - past)
 			} else {
+				s.FullSync()
 				timeChan = time.After(1 * time.Second)
 			}
+			lastTime = time.Now()
 		}
 	}
 }

@@ -199,6 +199,9 @@ func (d *Diff) conDo(cocurrent int, keys []string, doFunc func(string)) {
 				select {
 				case key := <-ch:
 					doFunc(key)
+					log.Infow("concurrent do done key",
+						"key", key,
+					)
 					wg.Done()
 				case <-stop:
 					return
@@ -208,10 +211,15 @@ func (d *Diff) conDo(cocurrent int, keys []string, doFunc func(string)) {
 	}
 
 	for _, key := range keys {
+		log.Infow("concurrent do add key",
+			"key", key,
+		)
 		wg.Add(1)
 		ch <- key
 	}
+	log.Info("concurrent do waiting...")
 	wg.Wait()
+	log.Info("concurrent do wait done")
 	close(stop)
 }
 
@@ -234,14 +242,29 @@ func (d *Diff) Fix(e *log.Event) (missedCount, extraCount int) {
 	// 补齐 etcd 缺失的 key
 	missedCount = len(d.missed)
 	d.conDo(int(d.concurrency), d.missed, func(key string) {
+		e.Record("missed key zk get",
+			"key", key,
+		)
 		value, ok := zookeeper.Get(key)
+		e.Record("missed key zk got",
+			"key", key,
+			"value", value,
+		)
 		if !ok {
 			log.Errorw("try add etcd key but not exist in zk",
 				"key", key,
 			)
 			return
 		}
+		e.Record("missed key etcd put",
+			"key", key,
+			"value", value,
+		)
 		etcd.Put(key, value, e)
+		e.Record("missed key etcd put done",
+			"key", key,
+			"value", value,
+		)
 	})
 	return
 }

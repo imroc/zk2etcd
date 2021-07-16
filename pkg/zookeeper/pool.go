@@ -8,13 +8,16 @@ import (
 )
 
 type Pool struct {
-	m       sync.Mutex    // 保证多个goroutine访问时候，closed的线程安全
 	conns   chan *zk.Conn //连接存储的chan
+	size    int
+	count   int
+	lock    sync.Mutex
 	servers []string
 }
 
 func NewPool(servers []string, size int) *Pool {
 	return &Pool{
+		size:    size,
 		servers: servers,
 		conns:   make(chan *zk.Conn, size),
 	}
@@ -48,7 +51,16 @@ func (p *Pool) GetConn() *zk.Conn {
 	case c := <-p.conns:
 		return c
 	default:
-		return connectUntilSuccess(p.servers)
+		var conn *zk.Conn
+		p.lock.Lock()
+		if p.count < p.size {
+			conn = connectUntilSuccess(p.servers)
+			p.count++
+		} else {
+			conn = <-p.conns
+		}
+		p.lock.Unlock()
+		return conn
 	}
 }
 
