@@ -1,6 +1,6 @@
 # zk2etcd 变更历史
 
-## v1.2.4 (2021.07.17)
+## v1.2.4 (2021.07.16)
 
 * 重置 fullsync timer (修复 fullsync timer 失效)
 
