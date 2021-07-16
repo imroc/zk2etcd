@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-IMAGE := imroc/zk2etcd:1.2.2
+IMAGE := imroc/zk2etcd:1.2.3
 
 .PHONY: build_docker
 build_docker:
