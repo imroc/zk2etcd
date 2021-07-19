@@ -1,5 +1,9 @@
 # zk2etcd 变更历史
 
+## v1.2.5 (2021.07.19)
+
+* 增强断网后 zk 连接池重连机制 (非 watch 连接)，修复断网恢复后 fullsync 失效问题
+
 ## v1.2.4 (2021.07.16)
 
 * 重置 fullsync timer (修复 fullsync timer 失效)
