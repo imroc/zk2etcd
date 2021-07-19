@@ -87,7 +87,9 @@ func (c *Client) ReConnect() {
 func (c *Client) dozkn(op string, fn func(conn *zk.Conn) (bool, error), n int) {
 	try.Do(func() bool {
 		conn := c.getConn()
-		defer c.putConn(conn)
+		defer func() {
+			c.putConn(conn)
+		}()
 		before := time.Now()
 		ok, err := fn(conn)
 		cost := time.Since(before)
