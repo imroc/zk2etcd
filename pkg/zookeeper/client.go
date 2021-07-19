@@ -94,6 +94,10 @@ func (c *Client) dozkn(op string, fn func(conn *zk.Conn) (bool, error), n int) {
 		status := "success"
 		if err != nil {
 			status = err.Error()
+			if err != zk.ErrNoNode && err != zk.ErrNodeExists {
+				conn.Close()
+				conn = connectUntilSuccess(c.servers)
+			}
 		}
 		ZKOp.WithLabelValues(op, status).Inc()
 		ZKOpDuration.WithLabelValues(op, status).Observe(float64(time.Duration(cost) / time.Second))
