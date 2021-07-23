@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-IMAGE := imroc/zk2etcd:1.2.5
+IMAGE := imroc/zk2etcd:1.3.0
 
 .PHONY: build_docker
 build_docker:
@@ -34,6 +34,17 @@ lint:
 clean:
 	rm ./bin/zk2etcd
 
+.PHONY: build_fast
+build_fast:
+	GOOS=linux GOARCH=amd64 ./build.sh
+	docker buildx build -f fast.Dockerfile --push --platform=linux/amd64 . -t $(IMAGE)
+
 .PHONY: dt
 dt:
-	docker buildx build --push --platform=linux/amd64 . -t cr.imroc.cc/test/zk2etcd:latest
+	GOOS=linux GOARCH=amd64 ./build.sh
+	docker buildx build -f fast.Dockerfile --push --platform=linux/amd64 . -t cr.imroc.cc/test/zk2etcd:latest
+
+.PHONY: build_fast
+build_fast:
+	GOOS=linux GOARCH=amd64 ./build.sh
+	docker buildx build -f fast.Dockerfile --platform=linux/amd64 . -t $(IMAGE)

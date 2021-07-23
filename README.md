@@ -203,9 +203,10 @@ spec:
       labels:
         app: debug
     spec:
+      serviceAccountName: zk2etcd
       containers:
       - name: debug
-        image: imroc/zk2etcd:1.2.5
+        image: imroc/zk2etcd:1.3.0
         volumeMounts:
         - mountPath: /certs
           name: etcd-certs
@@ -229,6 +230,7 @@ spec:
      - name: certs
        secret:
          secretName: etcd-certs
+         
 ---
 apiVersion: v1
 kind: Service
@@ -244,7 +246,47 @@ spec:
     name: http
   selector:
     app: zk2etcd
+    
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zk2etcd
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: zk2etcd
+rules:
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - '*'
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: zk2etcd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: zk2etcd
+subjects:
+- kind: ServiceAccount
+  name: zk2etcd
 ```
+
+## 关于高可用
+
+`zk2etcd sync` 支持高可用部署，`--leader-elect` 默认为 true，表示启用 leader 选举，原理是利用 k8s api 注册租约，各个 zk2etcd 副本竞争租约，只能有一个副本在运行，让运行的副本因某种原因无法正常工作时，其它的副本将竞争租约选举出新的 leader 来继续运行。
+
+目前高可用部署需要将 zk2etcd 部署在 k8s 中，且使用 RBAC 授予 lease 的读写权限(见上面的 yaml 示例)。
 
 ## API 说明
 

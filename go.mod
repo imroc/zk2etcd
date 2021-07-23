@@ -3,6 +3,7 @@ module github.com/imroc/zk2etcd
 go 1.16
 
 require (
+	github.com/Azure/go-autorest v11.1.2+incompatible // indirect
 	github.com/go-redis/redis/v8 v8.11.0
 	github.com/go-zookeeper/zk v1.0.2
 	github.com/imroc/req v0.3.0
@@ -15,4 +16,7 @@ require (
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.17.0
 	golang.org/x/net v0.0.0-20210525063256-abc453219eb5 // indirect
+	k8s.io/apimachinery v0.18.4
+	k8s.io/client-go v0.18.4
+	k8s.io/klog v1.0.0
 )

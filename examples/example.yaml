@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: zk2etcd
-        image: imroc/zk2etcd:1.2.5
+        image: imroc/zk2etcd:1.3.0
         imagePullPolicy: Always
         command: [ "/bin/zk2etcd" ]
         args:
@@ -32,3 +32,38 @@ spec:
         - --enable-event-log
         - --redis-server=redis:6379
         - --redis-password=hello:world
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zk2etcd
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: zk2etcd
+rules:
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - '*'
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: zk2etcd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: zk2etcd
+subjects:
+- kind: ServiceAccount
+  name: zk2etcd
