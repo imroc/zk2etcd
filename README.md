@@ -284,7 +284,7 @@ subjects:
 
 ## 关于高可用
 
-`zk2etcd sync` 支持高可用部署，`--leader-elect` 默认为 true，表示启用 leader 选举，原理是利用 k8s api 注册租约，各个 zk2etcd 副本竞争租约，只能有一个副本在运行，让运行的副本因某种原因无法正常工作时，其它的副本将竞争租约选举出新的 leader 来继续运行。
+`zk2etcd sync` 支持高可用部署，`--leader-elect` 默认为 true，表示启用 leader 选举，原理是利用 k8s api 注册租约，各个 zk2etcd 副本竞争租约，只能有一个副本在运行，当运行的副本因某种原因无法正常工作时，其它的副本将竞争租约选举出新的 leader 来继续运行。
 
 目前高可用部署需要将 zk2etcd 部署在 k8s 中，且使用 RBAC 授予 lease 的读写权限(见上面的 yaml 示例)。
 
