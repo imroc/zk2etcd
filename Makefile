@@ -34,11 +34,6 @@ lint:
 clean:
 	rm ./bin/zk2etcd
 
-.PHONY: build_fast
-build_fast:
-	GOOS=linux GOARCH=amd64 ./build.sh
-	docker buildx build -f fast.Dockerfile --push --platform=linux/amd64 . -t $(IMAGE)
-
 .PHONY: dt
 dt:
 	GOOS=linux GOARCH=amd64 ./build.sh
